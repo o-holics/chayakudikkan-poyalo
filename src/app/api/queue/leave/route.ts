@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fsFetch, toFirestoreObject, fromFirestoreObject } from '@/lib/firebase';
 import { getSessionToken, getJwtPayload } from '@/lib/auth';
-import { roomPath, memberPath, evaluateTimer, type QueueRoom } from '@/lib/queue';
+import { roomPath, memberPath, evaluateTimer, updateSpotCounters, type QueueRoom } from '@/lib/queue';
 
 export async function POST(request: Request) {
   const token = await getSessionToken();
@@ -14,11 +14,21 @@ export async function POST(request: Request) {
   try {
     const { spotId, roomId } = await request.json();
 
+    // Check user profile prior to reset
+    let previousStatus = 'idle';
+    let previousSpotId = spotId;
+    try {
+      const userData = await fsFetch(`users/${uid}`, {}, token);
+      const user = fromFirestoreObject(userData.fields);
+      previousStatus = user.status || 'idle';
+      if (user.currentSpotId) previousSpotId = user.currentSpotId;
+    } catch (e) {}
+
     // Remove from the specific room's members
     if (spotId && roomId) {
       await fsFetch(memberPath(spotId, roomId, uid), { method: 'DELETE' }, token).catch(() => {});
 
-      // After removal, re-evaluate timer (may reset if count drops below 5)
+      // After removal, re-evaluate timer (may reset if count drops below minimum)
       try {
         const roomData = await fsFetch(roomPath(spotId, roomId), {}, token);
         const room = { id: roomId, ...fromFirestoreObject(roomData.fields) } as QueueRoom;
@@ -34,6 +44,15 @@ export async function POST(request: Request) {
           await evaluateTimer(spotId, room, memberCount, token);
         }
       } catch (e) {}
+    }
+
+    // Decrement appropriate counter on the spot
+    if (previousSpotId) {
+      if (previousStatus === 'waiting') {
+        await updateSpotCounters(previousSpotId, -1, 0, token);
+      } else if (previousStatus === 'matched') {
+        await updateSpotCounters(previousSpotId, 0, -1, token);
+      }
     }
 
     // Reset user status

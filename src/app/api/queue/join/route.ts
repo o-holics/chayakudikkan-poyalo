@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { fsFetch, toFirestoreObject, fromFirestoreObject } from '@/lib/firebase';
 import { getSessionToken, getJwtPayload } from '@/lib/auth';
 import {
-  roomPath, memberPath, triggerMatch, evaluateTimer,
+  roomPath, memberPath, triggerMatch, evaluateTimer, updateSpotCounters,
   type QueueRoom, type QueueMember
 } from '@/lib/queue';
 
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const { spotId, groupSize, genderFilter } = await request.json();
 
     if (!spotId) return NextResponse.json({ error: 'Spot ID required' }, { status: 400 });
-    if (![2, 5, 8, 10].includes(groupSize)) return NextResponse.json({ error: 'Invalid group size' }, { status: 400 });
+    if (![2, 3, 6].includes(groupSize)) return NextResponse.json({ error: 'Invalid group size (must be 2, 3, or 6)' }, { status: 400 });
     if (!['mixed', 'male', 'female', 'other'].includes(genderFilter)) {
       return NextResponse.json({ error: 'Invalid gender filter' }, { status: 400 });
     }
@@ -181,6 +181,9 @@ export async function POST(request: Request) {
         fields: toFirestoreObject({ status: 'waiting', currentRoomId: targetRoomId, currentSpotId: spotId })
       })
     }, token);
+
+    // Increment waiting counter for this spot
+    await updateSpotCounters(spotId, +1, 0, token);
 
     // Fetch actual members now
     let allMembers: QueueMember[] = [];

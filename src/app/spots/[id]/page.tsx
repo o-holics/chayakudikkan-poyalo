@@ -12,8 +12,8 @@ const fetcher = (url: string) => fetch(url).then((res) => {
   return res.json();
 });
 
-const GROUP_SIZES = [2, 5, 8, 10];
-const LARGE_SIZES = [8, 10];
+const GROUP_SIZES = [2, 3, 6];
+const LARGE_SIZES = [6];
 
 const GENDER_COLORS: Record<string, string> = {
   male: 'from-blue-500 to-indigo-600',
@@ -59,10 +59,11 @@ function useCountdown(matchAt: string | null) {
 
 // ─── Avatar slot ─────────────────────────────────────────────────────────────
 function AvatarSlot({
-  member, index, onSelect
+  member, index, isFriend, onSelect
 }: {
   member?: { uid?: string; username: string; gender: string };
   index: number;
+  isFriend?: boolean;
   onSelect?: (m: any) => void;
 }) {
   const isFilled = !!member;
@@ -71,14 +72,16 @@ function AvatarSlot({
   return (
     <div
       onClick={() => isFilled && onSelect && onSelect(member)}
-      className={`flex flex-col items-center gap-2 ${isFilled && onSelect ? 'cursor-pointer hover:scale-105 transition-transform' : ''}`}
+      className={`flex flex-col items-center gap-1.5 relative ${isFilled && onSelect ? 'cursor-pointer hover:scale-105 transition-transform' : ''}`}
     >
       <div
         className={`
           relative w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold
           transition-all duration-700 ease-out
           ${isFilled
-            ? `bg-gradient-to-br ${gradient} text-white shadow-lg ring-2 ring-white/20 scale-110`
+            ? isFriend
+              ? `bg-gradient-to-br ${gradient} text-white shadow-xl shadow-emerald-500/30 ring-2 ring-emerald-400 ring-offset-2 ring-offset-gray-900 scale-110`
+              : `bg-gradient-to-br ${gradient} text-white shadow-lg ring-2 ring-white/20 scale-110`
             : 'bg-gray-800 border-2 border-dashed border-gray-600 text-gray-600'
           }
         `}
@@ -86,23 +89,41 @@ function AvatarSlot({
       >
         {isFilled ? member!.username.charAt(0).toUpperCase() : '?'}
 
+        {/* Friend badge */}
+        {isFilled && isFriend && (
+          <span
+            className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-md ring-2 ring-gray-900 animate-pulse"
+            title="Your Friend"
+          >
+            💚
+          </span>
+        )}
+
         {/* Glow pulse on fill */}
         {isFilled && (
-          <span className={`absolute inset-0 rounded-full bg-gradient-to-br ${gradient} opacity-30 animate-ping`}
+          <span className={`absolute inset-0 rounded-full ${isFriend ? 'bg-emerald-400' : `bg-gradient-to-br ${gradient}`} opacity-30 animate-ping`}
             style={{ animationDuration: '1.2s', animationIterationCount: 1 }}
           />
         )}
       </div>
-      <span className="text-[11px] text-gray-400 max-w-[56px] truncate text-center">
-        {isFilled ? member!.username : '—'}
-      </span>
+
+      <div className="flex flex-col items-center">
+        <span className="text-[11px] text-gray-300 font-medium max-w-[56px] truncate text-center">
+          {isFilled ? member!.username : '—'}
+        </span>
+        {isFilled && isFriend && (
+          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 mt-0.5 animate-fade-in">
+            Friend
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
 // ─── Queue display ────────────────────────────────────────────────────────────
 function QueueDisplay({
-  current, required, genderFilter, members, matchAt, timerStartedAt, onSelectMember
+  current, required, genderFilter, members, matchAt, timerStartedAt, friendUids, onSelectMember
 }: {
   current: number;
   required: number;
@@ -110,6 +131,7 @@ function QueueDisplay({
   members: { uid?: string; username: string; gender: string }[];
   matchAt: string | null;
   timerStartedAt: string | null;
+  friendUids?: Set<string>;
   onSelectMember?: (m: any) => void;
 }) {
   const countdown = useCountdown(matchAt);
@@ -118,6 +140,8 @@ function QueueDisplay({
   const timerPaused = isLargeGroup && !timerStartedAt && current > 0;
 
   const slots = Array.from({ length: required }, (_, i) => members[i] ?? null);
+
+  const friendsInQueue = members.filter(m => m.uid && friendUids?.has(m.uid));
 
   const getGenderFilterTag = () => {
     if (!genderFilter || genderFilter === 'mixed') return { text: 'Mixed Group', color: 'bg-gray-800 text-gray-300 border-gray-700' };
@@ -130,6 +154,23 @@ function QueueDisplay({
 
   return (
     <div>
+      {/* Friend presence alert banner */}
+      {friendsInQueue.length > 0 && (
+        <div className="mb-5 p-3 rounded-xl bg-gradient-to-r from-emerald-950/70 via-teal-950/60 to-emerald-950/70 border border-emerald-500/40 flex items-center gap-3 animate-fade-in shadow-xl shadow-emerald-950/30">
+          <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-base">
+            ✨
+          </div>
+          <div className="text-xs">
+            <span className="font-bold text-emerald-300">
+              {friendsInQueue.length === 1
+                ? `Your friend ${friendsInQueue[0].username} is in this queue with you!`
+                : `${friendsInQueue.map(f => f.username).join(', ')} (your friends) are in this queue!`}
+            </span>
+            <p className="text-[11px] text-emerald-400/80 mt-0.5">You'll be meeting up together!</p>
+          </div>
+        </div>
+      )}
+
       {/* Header stats */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -168,7 +209,7 @@ function QueueDisplay({
             ) : (
               <>
                 <span>⏱</span>
-                <span>Timer starts at 5</span>
+                <span>Timer starts at 3</span>
               </>
             )}
           </div>
@@ -183,14 +224,14 @@ function QueueDisplay({
         />
       </div>
 
-      {/* Timer info for large groups */}
+      {/* Timer info for size 6 groups */}
       {isLargeGroup && (
         <div className={`rounded-lg p-3 mb-6 text-xs text-center ${timerActive ? 'bg-amber-500/10 border border-amber-500/20 text-amber-300' : 'bg-gray-800/50 border border-gray-700 text-gray-500'}`}>
           {timerActive
             ? current >= required
               ? '🚀 Full! Matching now…'
-              : `⏱ Group matches when timer hits 0:00 (minimum 5 people). ${required - current} more welcome!`
-            : `Need at least 5 people to start the 3-minute timer. ${5 - current > 0 ? `${5 - current} more to go!` : ''}`
+              : `⏱ Group matches when timer hits 0:00 (minimum 3 people). ${required - current} more welcome!`
+            : `Need at least 3 people to start the 1m 30s timer. ${3 - current > 0 ? `${3 - current} more to go!` : ''}`
           }
         </div>
       )}
@@ -202,6 +243,7 @@ function QueueDisplay({
             key={i}
             member={member ?? undefined}
             index={i}
+            isFriend={!!(member?.uid && friendUids?.has(member.uid))}
             onSelect={onSelectMember}
           />
         ))}
@@ -224,7 +266,8 @@ export default function SpotDetailsPage() {
   const params = useParams();
   const spotId = params.id as string;
 
-  const [selectedSize, setSelectedSize] = useState<number | null>(null);
+  const [queueMode, setQueueMode] = useState<'default' | 'custom'>('default');
+  const [selectedSize, setSelectedSize] = useState<number>(6);
   const [genderFilter, setGenderFilter] = useState<'mixed' | 'male' | 'female' | 'other'>('mixed');
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -235,6 +278,10 @@ export default function SpotDetailsPage() {
   const spot = spots?.find((s: any) => s.id === spotId);
 
   const { data: profile } = useSWR(user ? '/api/user/profile' : null, fetcher);
+  const { data: friendsData } = useSWR(user ? '/api/friends' : null, fetcher, {
+    refreshInterval: 5000,
+  });
+  const friendUids = new Set<string>((friendsData?.friends || []).map((f: any) => f.uid));
 
   const { data: statusData, mutate: mutateStatus } = useSWR(
     user ? '/api/queue/status' : null,
@@ -250,15 +297,14 @@ export default function SpotDetailsPage() {
   const userGender = profile?.gender;
   const userGenderOption = userGender && userGender !== 'prefer_not_to_say' ? GENDER_LABELS[userGender] : null;
 
-  const handleJoin = async () => {
-    if (!selectedSize) return;
+  const handleJoinQueue = async (sizeToJoin: number, filterToJoin: string) => {
     setJoining(true);
     setErrorMsg(null);
     try {
       const res = await fetch('/api/queue/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spotId, groupSize: selectedSize, genderFilter }),
+        body: JSON.stringify({ spotId, groupSize: sizeToJoin, genderFilter: filterToJoin }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -309,7 +355,10 @@ export default function SpotDetailsPage() {
             ← Back
           </Link>
           <h1 className="text-3xl font-bold">{spot.name}</h1>
-          <p className="text-gray-300 text-sm mt-1">{spot.description}</p>
+          <p className="text-gray-300 text-sm mt-1 flex items-center gap-1.5">
+            <span>📍</span>
+            <span>{spot.place || spot.description}</span>
+          </p>
         </div>
       </div>
 
@@ -338,6 +387,7 @@ export default function SpotDetailsPage() {
               <div className="flex flex-wrap gap-4 justify-center">
                 {(statusData.group?.userDetails ?? []).map((m: any, i: number) => {
                   const isSelf = m.uid === user?.uid;
+                  const isFriend = !!(m.uid && friendUids.has(m.uid));
                   return (
                     <button
                       key={i}
@@ -345,11 +395,23 @@ export default function SpotDetailsPage() {
                       onClick={() => setSelectedUser(m)}
                       className={`flex flex-col items-center gap-1 transition-transform ${isSelf ? 'opacity-80 cursor-default' : 'hover:scale-105 cursor-pointer'}`}
                     >
-                      <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${GENDER_COLORS[m.gender] ?? 'from-indigo-500 to-purple-600'} flex items-center justify-center text-lg font-bold shadow-md`}>
+                      <div className={`relative w-12 h-12 rounded-full bg-gradient-to-br ${GENDER_COLORS[m.gender] ?? 'from-indigo-500 to-purple-600'} flex items-center justify-center text-lg font-bold shadow-md ${isFriend ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-gray-900 shadow-emerald-500/30' : ''}`}>
                         {m.username.charAt(0).toUpperCase()}
+                        {isFriend && (
+                          <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-pulse">
+                            💚
+                          </span>
+                        )}
                       </div>
                       <span className="text-xs text-gray-300 font-medium">{m.username} {isSelf ? '(You)' : ''}</span>
-                      <span className="text-[10px] text-gray-500 capitalize">{m.gender?.replace(/_/g, ' ')}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-gray-500 capitalize">{m.gender?.replace(/_/g, ' ')}</span>
+                        {isFriend && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                            Friend
+                          </span>
+                        )}
+                      </div>
                     </button>
                   );
                 })}
@@ -377,6 +439,7 @@ export default function SpotDetailsPage() {
               members={statusData.members ?? []}
               matchAt={statusData.matchAt}
               timerStartedAt={statusData.timerStartedAt}
+              friendUids={friendUids}
               onSelectMember={(m) => {
                 if (m?.username !== profile?.username) {
                   setSelectedUser(m);
@@ -396,139 +459,172 @@ export default function SpotDetailsPage() {
           </div>
         )}
 
-        {/* ── IDLE — choose size & gender preference ── */}
+        {/* ── IDLE — Direct Action: Join Default & Custom Queue ── */}
         {!isMatched && !isWaiting && (
-          <div className="animate-fade-in-up">
-            {/* Step 1: Group Size */}
-            <h2 className="text-lg font-semibold text-gray-200 mb-1">1. Choose group size</h2>
-            <p className="text-gray-500 text-sm mb-4">Sizes 8 and 10 match after a 3-minute timer (minimum 5 people).</p>
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              {GROUP_SIZES.map((size) => {
-                const isLarge = LARGE_SIZES.includes(size);
-                return (
-                  <button
-                    key={size}
-                    onClick={() => setSelectedSize(size)}
-                    className={`
-                      relative p-5 rounded-xl border-2 text-left transition-all duration-200
-                      ${selectedSize === size
-                        ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/20'
-                        : 'border-gray-700 bg-gray-800/50 hover:border-gray-500 hover:bg-gray-800'
-                      }
-                    `}
-                  >
-                    {isLarge && (
-                      <span className="absolute top-2 right-2 text-[10px] text-amber-400 border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
-                        Timer
-                      </span>
-                    )}
-
-                    <div className="text-3xl font-extrabold text-white mb-1">{size}</div>
-                    <div className="text-xs text-gray-500">
-                      {isLarge ? 'Matches in 3 min (min 5)' : 'Matches when full'}
-                    </div>
-
-                    {selectedSize === size && (
-                      <div className="absolute bottom-3 right-3 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Step 2: Gender Preference */}
-            <h2 className="text-lg font-semibold text-gray-200 mb-1">2. Gender preference</h2>
-            <p className="text-gray-500 text-sm mb-4">Choose who you want to meet up with.</p>
-
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              {/* Mixed Option */}
-              <button
-                type="button"
-                onClick={() => setGenderFilter('mixed')}
-                className={`
-                  relative p-4 rounded-xl border-2 text-left transition-all duration-200
-                  ${genderFilter === 'mixed'
-                    ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/20'
-                    : 'border-gray-700 bg-gray-800/50 hover:border-gray-500 hover:bg-gray-800'
-                  }
-                `}
-              >
-                <div className="text-xl mb-1">🌍</div>
-                <div className="font-semibold text-white text-sm">Mixed Group</div>
-                <div className="text-xs text-gray-400 mt-0.5">Open to all genders</div>
-                {genderFilter === 'mixed' && (
-                  <div className="absolute top-3 right-3 w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
-                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                )}
-              </button>
-
-              {/* Gender-Only Option (Matches user's profile) */}
-              {userGender && userGender !== 'prefer_not_to_say' && userGenderOption ? (
-                <button
-                  type="button"
-                  onClick={() => setGenderFilter(userGender as any)}
-                  className={`
-                    relative p-4 rounded-xl border-2 text-left transition-all duration-200
-                    ${genderFilter === userGender
-                      ? userGender === 'female'
-                        ? 'border-pink-500 bg-pink-500/10 shadow-lg shadow-pink-500/20'
-                        : 'border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-500/20'
-                      : 'border-gray-700 bg-gray-800/50 hover:border-gray-500 hover:bg-gray-800'
-                    }
-                  `}
-                >
-                  <div className="text-xl mb-1">{userGenderOption.icon}</div>
-                  <div className="font-semibold text-white text-sm">{userGenderOption.label}</div>
-                  <div className="text-xs text-gray-400 mt-0.5">Only for registered {userGender}s</div>
-                  {genderFilter === userGender && (
-                    <div className={`absolute top-3 right-3 w-4 h-4 rounded-full ${userGender === 'female' ? 'bg-pink-500' : 'bg-blue-500'} flex items-center justify-center`}>
-                      <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                  )}
-                </button>
-              ) : (
-                <div className="p-4 rounded-xl border border-dashed border-gray-700 bg-gray-800/20 flex flex-col justify-center">
-                  <div className="text-xs text-gray-500">
-                    Gender-specific queues available for registered male or female profiles.
-                  </div>
-                </div>
-              )}
-            </div>
-
+          <div className="animate-fade-in-up space-y-6">
             {errorMsg && (
-              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
                 {errorMsg}
               </div>
             )}
 
-            <button
-              onClick={handleJoin}
-              disabled={!selectedSize || joining}
-              className={`
-                w-full py-4 rounded-xl font-bold text-lg transition-all duration-200
-                ${selectedSize
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-500/30 transform hover:scale-[1.02] active:scale-[0.98]'
-                  : 'bg-gray-800 text-gray-600 cursor-not-allowed'
-                }
-              `}
-            >
-              {joining
-                ? 'Joining queue…'
-                : selectedSize
-                  ? `Join ${genderFilter !== 'mixed' ? (genderFilter === 'male' ? 'Men-Only ' : genderFilter === 'female' ? 'Women-Only ' : '') : ''}Group of ${selectedSize}`
-                  : 'Select a group size'
-              }
-            </button>
+            {/* 1-CLICK FAST ACTION: JOIN DEFAULT */}
+            <div className="bg-gradient-to-br from-indigo-950/60 via-gray-900/80 to-purple-950/60 border border-indigo-500/40 rounded-2xl p-6 shadow-xl shadow-indigo-950/40">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xl">⚡</span>
+                    <h3 className="text-lg font-bold text-white">Default Fast Queue</h3>
+                    <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-500/30">
+                      Popular
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Group of 6 • Mixed gender • 1m 30s match timer (starts at 3 people)
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleJoinQueue(6, 'mixed')}
+                  disabled={joining}
+                  className="py-3.5 px-6 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-indigo-500/30 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+                >
+                  {joining ? 'Joining…' : (
+                    <>
+                      <span>⚡</span>
+                      <span>Join Default</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* DIVIDER */}
+            <div className="relative text-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-800" />
+              </div>
+              <span className="relative bg-gray-900 px-3 text-xs text-gray-500 font-medium uppercase tracking-wider">
+                Or Custom Queue
+              </span>
+            </div>
+
+            {/* CUSTOM QUEUE SETUP */}
+            <div className="bg-gray-800/40 border border-gray-700/70 rounded-2xl p-6 space-y-5">
+              {/* Step 1: Group Size */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                    Group Size
+                  </label>
+                  <span className="text-[11px] text-gray-500">
+                    {selectedSize === 6 ? '⏱ Matches in 1m 30s at 3+' : 'Matches when full'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  {GROUP_SIZES.map((size) => {
+                    const isLarge = LARGE_SIZES.includes(size);
+                    const isSelected = selectedSize === size;
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => setSelectedSize(size)}
+                        className={`
+                          relative p-3.5 rounded-xl border-2 text-left transition-all duration-200 cursor-pointer
+                          ${isSelected
+                            ? 'border-indigo-500 bg-indigo-500/15 shadow-md shadow-indigo-500/20'
+                            : 'border-gray-700 bg-gray-800/60 hover:border-gray-600 hover:bg-gray-800'
+                          }
+                        `}
+                      >
+                        {isLarge && (
+                          <span className="absolute top-2 right-2 text-[9px] text-amber-400 border border-amber-500/30 bg-amber-500/10 px-1 py-0.2 rounded-full font-bold">
+                            Timer
+                          </span>
+                        )}
+                        <div className="text-xl font-extrabold text-white mb-0.5">{size}</div>
+                        <div className="text-[10px] text-gray-400">
+                          {isLarge ? '1m 30s timer' : 'Instant match'}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Step 2: Gender Preference */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2.5">
+                  Gender Preference
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Mixed Option */}
+                  <button
+                    type="button"
+                    onClick={() => setGenderFilter('mixed')}
+                    className={`
+                      relative p-3 rounded-xl border-2 text-left transition-all duration-200 cursor-pointer
+                      ${genderFilter === 'mixed'
+                        ? 'border-indigo-500 bg-indigo-500/15 shadow-md shadow-indigo-500/20'
+                        : 'border-gray-700 bg-gray-800/60 hover:border-gray-600 hover:bg-gray-800'
+                      }
+                    `}
+                  >
+                    <div className="text-lg mb-0.5">🌍</div>
+                    <div className="font-semibold text-white text-xs">Mixed Group</div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">All genders welcome</div>
+                  </button>
+
+                  {/* Gender-Only Option (Matches user's profile) */}
+                  {userGender && userGender !== 'prefer_not_to_say' && userGenderOption ? (
+                    <button
+                      type="button"
+                      onClick={() => setGenderFilter(userGender as any)}
+                      className={`
+                        relative p-3 rounded-xl border-2 text-left transition-all duration-200 cursor-pointer
+                        ${genderFilter === userGender
+                          ? userGender === 'female'
+                            ? 'border-pink-500 bg-pink-500/15 shadow-md shadow-pink-500/20'
+                            : 'border-blue-500 bg-blue-500/15 shadow-md shadow-blue-500/20'
+                          : 'border-gray-700 bg-gray-800/60 hover:border-gray-600 hover:bg-gray-800'
+                        }
+                      `}
+                    >
+                      <div className="text-lg mb-0.5">{userGenderOption.icon}</div>
+                      <div className="font-semibold text-white text-xs">{userGenderOption.label}</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">Only for {userGender}s</div>
+                    </button>
+                  ) : (
+                    <div className="p-3 rounded-xl border border-dashed border-gray-700 bg-gray-800/20 flex flex-col justify-center">
+                      <div className="text-[10px] text-gray-500">
+                        Gender-specific queues available for registered male or female profiles.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Button for Custom Queue */}
+              <button
+                type="button"
+                onClick={() => handleJoinQueue(selectedSize, genderFilter)}
+                disabled={joining || !selectedSize}
+                className="w-full py-3.5 rounded-xl bg-gray-700 hover:bg-gray-600 active:scale-[0.98] text-white font-bold text-sm border border-gray-600 shadow-md transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {joining ? 'Joining Custom Queue…' : (
+                  <>
+                    <span>⚙️</span>
+                    <span>
+                      Join {genderFilter !== 'mixed' ? (genderFilter === 'male' ? 'Men-Only ' : genderFilter === 'female' ? 'Women-Only ' : '') : ''}Custom Queue ({selectedSize})
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
       </div>

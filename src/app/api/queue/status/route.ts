@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { fsFetch, fromFirestoreObject } from '@/lib/firebase';
+import { fsFetch, toFirestoreObject, fromFirestoreObject } from '@/lib/firebase';
 import { getSessionToken, getJwtPayload } from '@/lib/auth';
 import {
-  roomPath, memberPath, triggerMatch, evaluateTimer,
+  roomPath, memberPath, triggerMatch, evaluateTimer, updateSpotCounters,
   type QueueRoom, type QueueMember
 } from '@/lib/queue';
 
@@ -37,6 +37,10 @@ export async function GET() {
             body: JSON.stringify({ fields: toFirestoreObject({ status: 'completed' }) })
           }, token).catch(() => {});
 
+          if (group.spotId) {
+            await updateSpotCounters(group.spotId, 0, -1, token);
+          }
+
           await fsFetch(`users/${uid}?updateMask.fieldPaths=status&updateMask.fieldPaths=currentGroupId&updateMask.fieldPaths=currentRoomId&updateMask.fieldPaths=currentSpotId`, {
             method: 'PATCH',
             body: JSON.stringify({
@@ -64,10 +68,20 @@ export async function GET() {
       const roomData = await fsFetch(roomPath(spotId, roomId), {}, token);
       const room = { id: roomId, ...fromFirestoreObject(roomData.fields) } as QueueRoom;
 
-      // If room was already matched (race condition), re-check user status
+      // If room was already matched, fetch and return the matched group immediately
       if (room.status === 'matched') {
-        // Poll again — user's profile update may be slightly behind
-        return NextResponse.json({ status: 'waiting', current: 0, required: room.groupSize, members: [], matchAt: null, timerStartedAt: null });
+        const groupId = (room as any).matchedGroupId || `group_${spotId}_${roomId}`;
+        try {
+          const groupData = await fsFetch(`groups/${groupId}`, {}, token);
+          if (groupData?.fields) {
+            const group = fromFirestoreObject(groupData.fields);
+            return NextResponse.json({
+              status: 'matched',
+              group,
+              expiresAt: group.expiresAt
+            });
+          }
+        } catch (e) {}
       }
 
       // Fetch all members
@@ -91,9 +105,12 @@ export async function GET() {
 
       if (shouldMatch) {
         const membersToMatch = allMembers.slice(0, room.groupSize);
-        const { groupId, secretWord } = await triggerMatch(spotId, roomId, membersToMatch, token);
-        // The user's own status is updated inside triggerMatch — return matched immediately
-        return NextResponse.json({ status: 'matched', group: { secretWord, userDetails: membersToMatch } });
+        const { groupId, secretWord, group } = await triggerMatch(spotId, roomId, membersToMatch, token);
+        return NextResponse.json({
+          status: 'matched',
+          group: group || { secretWord, userDetails: membersToMatch },
+          expiresAt: (group as any)?.expiresAt
+        });
       }
 
       return NextResponse.json({
@@ -105,7 +122,7 @@ export async function GET() {
         roomId,
         timerStartedAt,
         matchAt,
-        members: allMembers.map(m => ({ username: m.username, gender: m.gender }))
+        members: allMembers.map(m => ({ uid: m.uid, username: m.username, gender: m.gender }))
       });
     }
 

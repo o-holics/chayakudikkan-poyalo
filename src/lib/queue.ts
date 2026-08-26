@@ -10,9 +10,9 @@ const SECRET_WORDS = [
 
 export const MEETUP_DURATION_MS = 60 * 60 * 1000; // 1 hour
 
-export const TIMER_DURATION_MS = 3 * 60 * 1000; // 3 minutes
-export const TIMER_MIN_MEMBERS = 5; // Minimum for timer to start/continue
-export const LARGE_GROUP_SIZES = [8, 10]; // Sizes with timer logic
+export const TIMER_DURATION_MS = 90 * 1000; // 1 minute 30 seconds
+export const TIMER_MIN_MEMBERS = 3; // Minimum for timer to start/continue for size 6
+export const LARGE_GROUP_SIZES = [6]; // Timer only applies to size 6
 
 export type QueueRoom = {
   id: string;
@@ -40,6 +40,38 @@ export function roomPath(spotId: string, roomId: string) {
 }
 
 /**
+ * Updates waitingCount, matchedCount, and activeCount directly on the spot document.
+ */
+export async function updateSpotCounters(
+  spotId: string,
+  deltaWaiting: number,
+  deltaMatched: number,
+  token: string
+) {
+  if (!spotId) return;
+  try {
+    const spotData = await fsFetch(`spots/${spotId}`, {}, token);
+    const spot = spotData.fields ? (await import('@/lib/firebase')).fromFirestoreObject(spotData.fields) : {};
+    const waitingCount = Math.max(0, (spot.waitingCount || 0) + deltaWaiting);
+    const matchedCount = Math.max(0, (spot.matchedCount || 0) + deltaMatched);
+    const activeCount = waitingCount + matchedCount;
+
+    await fsFetch(
+      `spots/${spotId}?updateMask.fieldPaths=waitingCount&updateMask.fieldPaths=matchedCount&updateMask.fieldPaths=activeCount`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          fields: toFirestoreObject({ waitingCount, matchedCount, activeCount })
+        })
+      },
+      token
+    ).catch(() => {});
+  } catch (e) {
+    console.warn(`Could not update counters on spot ${spotId}:`, e);
+  }
+}
+
+/**
  * Returns the Firestore path for the members subcollection of a room.
  */
 export function memberPath(spotId: string, roomId: string, uid?: string) {
@@ -49,7 +81,7 @@ export function memberPath(spotId: string, roomId: string, uid?: string) {
 
 /**
  * Triggers a group match for the given room and members.
- * Creates the group document and updates all user statuses.
+ * Creates the group document and updates all user statuses idempotently.
  */
 export async function triggerMatch(
   spotId: string,
@@ -57,29 +89,49 @@ export async function triggerMatch(
   members: QueueMember[],
   token: string
 ) {
+  const groupId = `group_${spotId}_${roomId}`;
+
+  // Check if room or group was already created by a concurrent request
+  try {
+    const existingGroupData = await fsFetch(`groups/${groupId}`, {}, token);
+    if (existingGroupData?.fields) {
+      const eg = (await import('@/lib/firebase')).fromFirestoreObject(existingGroupData.fields);
+      if (eg?.secretWord) {
+        return { groupId, secretWord: eg.secretWord, group: eg };
+      }
+    }
+  } catch (e) {}
+
   const secretWord = SECRET_WORDS[Math.floor(Math.random() * SECRET_WORDS.length)];
-  const groupId = `group-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
   const now = new Date();
   const createdAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + MEETUP_DURATION_MS).toISOString();
 
-  // Create the group document
+  const groupPayload = {
+    spotId,
+    roomId,
+    groupSize: members.length,
+    users: members.map(m => m.uid),
+    userDetails: members.map(m => ({ uid: m.uid, username: m.username, gender: m.gender })),
+    secretWord,
+    status: 'active',
+    createdAt,
+    expiresAt,
+  };
+
+  // 1. Create the group document (single deterministic document ID)
   await fsFetch(`groups/${groupId}`, {
     method: 'PATCH',
     body: JSON.stringify({
-      fields: toFirestoreObject({
-        spotId,
-        roomId,
-        groupSize: members.length,
-        users: members.map(m => m.uid),
-        userDetails: members.map(m => ({ uid: m.uid, username: m.username, gender: m.gender })),
-        secretWord,
-        status: 'active',
-        createdAt,
-        expiresAt,
-      })
+      fields: toFirestoreObject(groupPayload)
     })
   }, token);
+
+  // 2. Mark room as matched and record matchedGroupId
+  await fsFetch(`${roomPath(spotId, roomId)}?updateMask.fieldPaths=status&updateMask.fieldPaths=matchedGroupId`, {
+    method: 'PATCH',
+    body: JSON.stringify({ fields: toFirestoreObject({ status: 'matched', matchedGroupId: groupId }) })
+  }, token).catch(() => {});
 
   // Fetch spot details for history description
   let spotName = 'Meetup Spot';
@@ -89,14 +141,14 @@ export async function triggerMatch(
     if (sf?.name) spotName = sf.name;
   } catch (e) {}
 
-  // Record meetup history for each participant
+  // 3. Record meetup history for each participant (using deterministic groupId as doc key)
   const historyRecord = {
     groupId,
     spotId,
     spotName,
     secretWord,
     groupSize: members.length,
-    matchedAt: new Date().toISOString(),
+    matchedAt: createdAt,
     members: members.map(m => ({ uid: m.uid, username: m.username, gender: m.gender }))
   };
 
@@ -109,13 +161,7 @@ export async function triggerMatch(
     }, token).catch(() => {})
   ));
 
-  // Mark room as matched
-  await fsFetch(`${roomPath(spotId, roomId)}?updateMask.fieldPaths=status`, {
-    method: 'PATCH',
-    body: JSON.stringify({ fields: toFirestoreObject({ status: 'matched' }) })
-  }, token).catch(() => {});
-
-  // Update all matched users' status
+  // 4. Update all matched users' status immediately
   await Promise.all(members.map(m =>
     fsFetch(`users/${m.uid}?updateMask.fieldPaths=status&updateMask.fieldPaths=currentGroupId&updateMask.fieldPaths=currentRoomId&updateMask.fieldPaths=currentSpotId`, {
       method: 'PATCH',
@@ -125,7 +171,10 @@ export async function triggerMatch(
     }, token).catch(() => {})
   ));
 
-  return { groupId, secretWord };
+  // 5. Update spot counters: shift members from waiting to matched
+  await updateSpotCounters(spotId, -members.length, +members.length, token);
+
+  return { groupId, secretWord, group: groupPayload };
 }
 
 /**
