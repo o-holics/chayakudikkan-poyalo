@@ -274,19 +274,27 @@ export default function SpotDetailsPage() {
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
-  const { data: spots } = useSWR('/api/spots', fetcher);
+  const { data: spots } = useSWR('/api/spots', fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 10000,
+  });
   const spot = spots?.find((s: any) => s.id === spotId);
 
-  const { data: profile } = useSWR(user ? '/api/user/profile' : null, fetcher);
+  const { data: profile } = useSWR(user ? '/api/user/profile' : null, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 15000,
+  });
   const { data: friendsData } = useSWR(user ? '/api/friends' : null, fetcher, {
-    refreshInterval: 5000,
+    refreshInterval: 10000,
+    dedupingInterval: 5000,
+    revalidateOnFocus: false,
   });
   const friendUids = new Set<string>((friendsData?.friends || []).map((f: any) => f.uid));
 
   const { data: statusData, mutate: mutateStatus } = useSWR(
     user ? '/api/queue/status' : null,
     fetcher,
-    { refreshInterval: 2500 }
+    { refreshInterval: 2500, dedupingInterval: 1500 }
   );
 
   const isMatched = statusData?.status === 'matched';

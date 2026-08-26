@@ -25,7 +25,8 @@ export default function FriendsPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'requests'>('all');
 
   const { data, mutate, isLoading } = useSWR(user ? '/api/friends' : null, fetcher, {
-    refreshInterval: 5000,
+    refreshInterval: 8000,
+    dedupingInterval: 4000,
   });
 
   const friends = data?.friends || [];

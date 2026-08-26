@@ -46,14 +46,20 @@ function ProfileContent() {
     router.replace(`/profile?tab=${tab}`, { scroll: false });
   };
 
-  const { data: profile, mutate: mutateProfile } = useSWR(user ? '/api/user/profile' : null, fetcher);
+  const { data: profile, mutate: mutateProfile } = useSWR(
+    user ? '/api/user/profile' : null,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 15000 }
+  );
   const { data: history = [], isLoading: historyLoading } = useSWR(
     user ? '/api/user/history' : null,
-    fetcher
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
   const { data: blockedUsers = [], mutate: mutateBlocked, isLoading: blockedLoading } = useSWR(
     user ? '/api/safety/block' : null,
-    fetcher
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
 
   // Location edit states

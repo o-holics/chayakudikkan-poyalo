@@ -128,7 +128,11 @@ export async function GET() {
     cachedSpots = spots;
     lastCacheTime = now;
 
-    return NextResponse.json(spots);
+    return NextResponse.json(spots, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=4, stale-while-revalidate=10',
+      },
+    });
   } catch (error: any) {
     if (error.message.includes('404')) {
       return NextResponse.json(DEFAULT_SPOTS);

@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 
+// Server-side in-memory cache for queries (1 hour TTL)
+const queryCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL_MS = 60 * 60 * 1000;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get('q');
@@ -8,6 +12,16 @@ export async function GET(request: Request) {
 
   // Reverse geocoding
   if (lat && lon) {
+    const cacheKey = `geo:${parseFloat(lat).toFixed(4)}:${parseFloat(lon).toFixed(4)}`;
+    const cached = queryCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return NextResponse.json(cached.data, {
+        headers: {
+          'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+        },
+      });
+    }
+
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`,
@@ -21,10 +35,18 @@ export async function GET(request: Request) {
       if (!res.ok) throw new Error('Reverse geocode failed');
       const data = await res.json();
       const displayName = data.display_name || 'Current Location';
-      return NextResponse.json({
+      const result = {
         name: displayName,
         lat: parseFloat(lat),
         lon: parseFloat(lon),
+      };
+
+      queryCache.set(cacheKey, { data: result, timestamp: Date.now() });
+
+      return NextResponse.json(result, {
+        headers: {
+          'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+        },
       });
     } catch (e: any) {
       return NextResponse.json({ error: e.message }, { status: 500 });
@@ -34,6 +56,16 @@ export async function GET(request: Request) {
   // Autocomplete forward search
   if (!q || q.trim().length < 2) {
     return NextResponse.json([]);
+  }
+
+  const normalizedQuery = q.trim().toLowerCase();
+  const cached = queryCache.get(normalizedQuery);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return NextResponse.json(cached.data, {
+      headers: {
+        'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      },
+    });
   }
 
   try {
@@ -66,7 +98,14 @@ export async function GET(request: Request) {
             city: props.city || props.town || props.state || '',
           };
         });
-        return NextResponse.json(results);
+
+        queryCache.set(normalizedQuery, { data: results, timestamp: Date.now() });
+
+        return NextResponse.json(results, {
+          headers: {
+            'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+          },
+        });
       }
     }
 
@@ -87,7 +126,14 @@ export async function GET(request: Request) {
         lat: parseFloat(item.lat),
         lon: parseFloat(item.lon),
       }));
-      return NextResponse.json(results);
+
+      queryCache.set(normalizedQuery, { data: results, timestamp: Date.now() });
+
+      return NextResponse.json(results, {
+        headers: {
+          'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+        },
+      });
     }
 
     return NextResponse.json([]);

@@ -21,22 +21,34 @@ export default function DashboardPage() {
 
   const { data: profile, error: profileError } = useSWR(
     user ? '/api/user/profile' : null,
-    fetcher
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 15000,
+    }
   );
 
   const { data: spots, error: spotsError } = useSWR('/api/spots', fetcher, {
-    refreshInterval: 10000,
+    refreshInterval: 8000,
+    dedupingInterval: 4000,
+    revalidateOnFocus: false,
   });
 
   const { data: friendsData } = useSWR(user ? '/api/friends' : null, fetcher, {
-    refreshInterval: 10000,
+    refreshInterval: 15000,
+    dedupingInterval: 8000,
+    revalidateOnFocus: true,
   });
   const pendingRequestsCount = friendsData?.requests?.length || 0;
 
   const { data: queueStatus, mutate: mutateQueueStatus } = useSWR(
     user ? '/api/queue/status' : null,
     fetcher,
-    { refreshInterval: 3000 }
+    {
+      refreshInterval: (latestData) =>
+        latestData?.status === 'waiting' || latestData?.status === 'matched' ? 3000 : 10000,
+      dedupingInterval: 2000,
+    }
   );
 
   const isUserWaiting = queueStatus?.status === 'waiting';
