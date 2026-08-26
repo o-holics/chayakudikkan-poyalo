@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import Link from 'next/link';
+import UserActionModal from '@/components/UserActionModal';
 
 const fetcher = (url: string) => fetch(url).then((res) => {
   if (!res.ok) throw new Error('Fetch failed');
@@ -47,18 +48,31 @@ function useCountdown(matchAt: string | null) {
   if (remaining === null) return null;
 
   const totalSeconds = Math.ceil(remaining / 1000);
-  const m = Math.floor(totalSeconds / 60);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
+  if (h > 0) {
+    return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
+  }
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 // ─── Avatar slot ─────────────────────────────────────────────────────────────
-function AvatarSlot({ member, index }: { member?: { username: string; gender: string }; index: number }) {
+function AvatarSlot({
+  member, index, onSelect
+}: {
+  member?: { uid?: string; username: string; gender: string };
+  index: number;
+  onSelect?: (m: any) => void;
+}) {
   const isFilled = !!member;
   const gradient = isFilled ? (GENDER_COLORS[member!.gender] ?? 'from-indigo-500 to-purple-600') : '';
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div
+      onClick={() => isFilled && onSelect && onSelect(member)}
+      className={`flex flex-col items-center gap-2 ${isFilled && onSelect ? 'cursor-pointer hover:scale-105 transition-transform' : ''}`}
+    >
       <div
         className={`
           relative w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold
@@ -88,14 +102,15 @@ function AvatarSlot({ member, index }: { member?: { username: string; gender: st
 
 // ─── Queue display ────────────────────────────────────────────────────────────
 function QueueDisplay({
-  current, required, genderFilter, members, matchAt, timerStartedAt
+  current, required, genderFilter, members, matchAt, timerStartedAt, onSelectMember
 }: {
   current: number;
   required: number;
   genderFilter?: string;
-  members: { username: string; gender: string }[];
+  members: { uid?: string; username: string; gender: string }[];
   matchAt: string | null;
   timerStartedAt: string | null;
+  onSelectMember?: (m: any) => void;
 }) {
   const countdown = useCountdown(matchAt);
   const isLargeGroup = LARGE_SIZES.includes(required);
@@ -183,7 +198,12 @@ function QueueDisplay({
       {/* Avatar grid */}
       <div className={`flex flex-wrap justify-center gap-5 mb-8`}>
         {slots.map((member, i) => (
-          <AvatarSlot key={i} member={member ?? undefined} index={i} />
+          <AvatarSlot
+            key={i}
+            member={member ?? undefined}
+            index={i}
+            onSelect={onSelectMember}
+          />
         ))}
       </div>
 
@@ -206,6 +226,7 @@ export default function SpotDetailsPage() {
 
   const [selectedSize, setSelectedSize] = useState<number | null>(null);
   const [genderFilter, setGenderFilter] = useState<'mixed' | 'male' | 'female' | 'other'>('mixed');
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -223,6 +244,8 @@ export default function SpotDetailsPage() {
 
   const isMatched = statusData?.status === 'matched';
   const isWaiting = statusData?.status === 'waiting';
+
+  const meetupRemaining = useCountdown(isMatched ? (statusData?.expiresAt || null) : null);
 
   const userGender = profile?.gender;
   const userGenderOption = userGender && userGender !== 'prefer_not_to_say' ? GENDER_LABELS[userGender] : null;
@@ -297,24 +320,39 @@ export default function SpotDetailsPage() {
           <div className="bg-gradient-to-br from-indigo-900/40 to-purple-900/40 border border-indigo-500/40 rounded-2xl p-8 text-center animate-fade-in-up">
             <div className="text-5xl mb-3">🎉</div>
             <h2 className="text-2xl font-bold mb-1">Your group is ready!</h2>
-            <p className="text-gray-400 text-sm mb-6">Find each other using this secret word:</p>
+            <p className="text-gray-400 text-sm mb-4">Find each other using this secret word:</p>
 
-            <div className="inline-block bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-3xl font-extrabold tracking-widest py-4 px-10 rounded-xl shadow-2xl shadow-indigo-500/30 mb-8">
+            {meetupRemaining && (
+              <div className="inline-flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs px-3.5 py-1.5 rounded-full mb-6 font-medium">
+                <span>⏱️</span>
+                <span>Active meetup • Disbands in <strong>{meetupRemaining}</strong></span>
+              </div>
+            )}
+
+            <div className="block bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-3xl font-extrabold tracking-widest py-4 px-10 rounded-xl shadow-2xl shadow-indigo-500/30 mb-8 max-w-sm mx-auto">
               {statusData.group?.secretWord}
             </div>
 
             <div className="bg-gray-900/60 rounded-xl p-4 mb-6">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Members</h3>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Members (click to interact)</h3>
               <div className="flex flex-wrap gap-4 justify-center">
-                {(statusData.group?.userDetails ?? []).map((m: any, i: number) => (
-                  <div key={i} className="flex flex-col items-center gap-1">
-                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${GENDER_COLORS[m.gender] ?? 'from-indigo-500 to-purple-600'} flex items-center justify-center text-lg font-bold`}>
-                      {m.username.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-xs text-gray-300">{m.username}</span>
-                    <span className="text-[10px] text-gray-600 capitalize">{m.gender?.replace(/_/g, ' ')}</span>
-                  </div>
-                ))}
+                {(statusData.group?.userDetails ?? []).map((m: any, i: number) => {
+                  const isSelf = m.uid === user?.uid;
+                  return (
+                    <button
+                      key={i}
+                      disabled={isSelf}
+                      onClick={() => setSelectedUser(m)}
+                      className={`flex flex-col items-center gap-1 transition-transform ${isSelf ? 'opacity-80 cursor-default' : 'hover:scale-105 cursor-pointer'}`}
+                    >
+                      <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${GENDER_COLORS[m.gender] ?? 'from-indigo-500 to-purple-600'} flex items-center justify-center text-lg font-bold shadow-md`}>
+                        {m.username.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-xs text-gray-300 font-medium">{m.username} {isSelf ? '(You)' : ''}</span>
+                      <span className="text-[10px] text-gray-500 capitalize">{m.gender?.replace(/_/g, ' ')}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -339,6 +377,11 @@ export default function SpotDetailsPage() {
               members={statusData.members ?? []}
               matchAt={statusData.matchAt}
               timerStartedAt={statusData.timerStartedAt}
+              onSelectMember={(m) => {
+                if (m?.username !== profile?.username) {
+                  setSelectedUser(m);
+                }
+              }}
             />
 
             <div className="mt-6 text-center">
@@ -489,6 +532,18 @@ export default function SpotDetailsPage() {
           </div>
         )}
       </div>
+
+      {/* User Action Modal */}
+      {selectedUser && (
+        <UserActionModal
+          isOpen={!!selectedUser}
+          onClose={() => setSelectedUser(null)}
+          targetUser={selectedUser}
+          onActionComplete={() => {
+            setSelectedUser(null);
+          }}
+        />
+      )}
     </div>
   );
 }

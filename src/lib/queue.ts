@@ -8,6 +8,8 @@ const SECRET_WORDS = [
   'Frozen Tide', 'Shadow Bloom', 'Crystal Mist', 'Neon Panda'
 ];
 
+export const MEETUP_DURATION_MS = 60 * 60 * 1000; // 1 hour
+
 export const TIMER_DURATION_MS = 3 * 60 * 1000; // 3 minutes
 export const TIMER_MIN_MEMBERS = 5; // Minimum for timer to start/continue
 export const LARGE_GROUP_SIZES = [8, 10]; // Sizes with timer logic
@@ -57,6 +59,9 @@ export async function triggerMatch(
 ) {
   const secretWord = SECRET_WORDS[Math.floor(Math.random() * SECRET_WORDS.length)];
   const groupId = `group-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
+  const now = new Date();
+  const createdAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + MEETUP_DURATION_MS).toISOString();
 
   // Create the group document
   await fsFetch(`groups/${groupId}`, {
@@ -70,10 +75,39 @@ export async function triggerMatch(
         userDetails: members.map(m => ({ uid: m.uid, username: m.username, gender: m.gender })),
         secretWord,
         status: 'active',
-        createdAt: new Date().toISOString()
+        createdAt,
+        expiresAt,
       })
     })
   }, token);
+
+  // Fetch spot details for history description
+  let spotName = 'Meetup Spot';
+  try {
+    const spotData = await fsFetch(`spots/${spotId}`, {}, token);
+    const sf = spotData.fields ? (await import('@/lib/firebase')).fromFirestoreObject(spotData.fields) : null;
+    if (sf?.name) spotName = sf.name;
+  } catch (e) {}
+
+  // Record meetup history for each participant
+  const historyRecord = {
+    groupId,
+    spotId,
+    spotName,
+    secretWord,
+    groupSize: members.length,
+    matchedAt: new Date().toISOString(),
+    members: members.map(m => ({ uid: m.uid, username: m.username, gender: m.gender }))
+  };
+
+  await Promise.all(members.map(m =>
+    fsFetch(`users/${m.uid}/meetupHistory/${groupId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        fields: toFirestoreObject(historyRecord)
+      })
+    }, token).catch(() => {})
+  ));
 
   // Mark room as matched
   await fsFetch(`${roomPath(spotId, roomId)}?updateMask.fieldPaths=status`, {

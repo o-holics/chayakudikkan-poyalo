@@ -23,14 +23,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid gender filter' }, { status: 400 });
     }
 
-    // Get user profile — we need their gender to enforce the filter
+    // Get user profile — check for any existing active queue or meetup
     let username = 'Unknown', gender = 'other';
+    let userProfile: any = null;
     try {
       const userData = await fsFetch(`users/${uid}`, {}, token);
-      const p = fromFirestoreObject(userData.fields);
-      username = p.username || 'Unknown';
-      gender = p.gender || 'other';
+      userProfile = fromFirestoreObject(userData.fields);
+      username = userProfile.username || 'Unknown';
+      gender = userProfile.gender || 'other';
     } catch (e) {}
+
+    // Guard: Prevent joining a new queue if user is in an active meetup
+    if (userProfile?.status === 'matched' && userProfile?.currentGroupId) {
+      try {
+        const groupData = await fsFetch(`groups/${userProfile.currentGroupId}`, {}, token);
+        const group = fromFirestoreObject(groupData.fields);
+        const now = Date.now();
+        const expiresAt = group.expiresAt ? new Date(group.expiresAt).getTime() : 0;
+        if (expiresAt > now && group.status === 'active') {
+          return NextResponse.json({
+            error: 'You are currently in an active meetup. Please end your current meetup before joining a new queue.'
+          }, { status: 400 });
+        }
+      } catch (e) {}
+    }
+
+    // Guard: Prevent joining if user is already waiting in a queue at a different spot
+    if (userProfile?.status === 'waiting' && userProfile?.currentRoomId && userProfile?.currentSpotId) {
+      if (userProfile.currentSpotId !== spotId) {
+        return NextResponse.json({
+          error: 'You are already waiting in a queue at another spot. Please leave your current queue first.'
+        }, { status: 400 });
+      }
+    }
 
     // Enforce gender filter: user must match the room's filter
     if (genderFilter !== 'mixed' && gender !== genderFilter) {
@@ -39,7 +64,19 @@ export async function POST(request: Request) {
       }, { status: 403 });
     }
 
-    // Find an available room matching both size and gender filter
+    // Fetch current user's blocked UIDs
+    const userBlockedUids = new Set<string>();
+    try {
+      const blocksData = await fsFetch(`users/${uid}/blocks`, {}, token);
+      if (blocksData.documents) {
+        for (const doc of blocksData.documents) {
+          const bUid = doc.name.split('/').pop();
+          if (bUid) userBlockedUids.add(bUid);
+        }
+      }
+    } catch (e) {}
+
+    // Find an available room matching size, gender filter, and block compatibility
     let targetRoomId: string | null = null;
     let targetRoom: QueueRoom | null = null;
 
@@ -56,20 +93,41 @@ export async function POST(request: Request) {
           if (r.groupSize !== groupSize) continue;
           if ((r.genderFilter || 'mixed') !== genderFilter) continue;
 
-          // Count members
-          let memberCount = 0;
+          // Fetch member IDs in this candidate room
+          let memberUids: string[] = [];
           try {
             const membersData = await fsFetch(memberPath(spotId, rid), {}, token);
-            memberCount = membersData.documents?.length || 0;
+            if (membersData.documents) {
+              memberUids = membersData.documents.map((d: any) => d.name.split('/').pop());
+            }
           } catch (e) {}
 
-          if (memberCount >= groupSize) continue;
+          // Check if room is full
+          if (memberUids.length >= groupSize) continue;
 
           // Check if we're already in this room
-          try {
-            await fsFetch(memberPath(spotId, rid, uid), {}, token);
+          if (memberUids.includes(uid)) {
             return NextResponse.json({ status: 'waiting', roomId: rid });
-          } catch (e) {}
+          }
+
+          // 1. Outgoing check: Check if ANY current room member is in our blocked list
+          const hasBlockedSomeoneInRoom = memberUids.some(mUid => userBlockedUids.has(mUid));
+          if (hasBlockedSomeoneInRoom) continue; // Skip room!
+
+          // 2. Incoming check: Concurrently check if ANY member in the room has blocked us
+          const blockChecks = await Promise.all(
+            memberUids.map(async (mUid) => {
+              try {
+                const bDoc = await fsFetch(`users/${mUid}/blocks/${uid}`, {}, token);
+                return !!bDoc?.fields;
+              } catch (e) {
+                return false;
+              }
+            })
+          );
+
+          const isBlockedByAnyMember = blockChecks.some(blocked => blocked === true);
+          if (isBlockedByAnyMember) continue; // Skip room!
 
           targetRoomId = rid;
           targetRoom = r;

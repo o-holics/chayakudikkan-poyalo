@@ -20,9 +20,41 @@ export async function GET() {
     const user = fromFirestoreObject(userData.fields);
 
     if (user.status === 'matched' && user.currentGroupId) {
-      const groupData = await fsFetch(`groups/${user.currentGroupId}`, {}, token);
-      const group = fromFirestoreObject(groupData.fields);
-      return NextResponse.json({ status: 'matched', group });
+      try {
+        const groupData = await fsFetch(`groups/${user.currentGroupId}`, {}, token);
+        const group = fromFirestoreObject(groupData.fields);
+
+        // Check if 1 hour has elapsed
+        const now = Date.now();
+        const expiresAtTime = group.expiresAt
+          ? new Date(group.expiresAt).getTime()
+          : (group.createdAt ? new Date(group.createdAt).getTime() + 60 * 60 * 1000 : 0);
+
+        if (expiresAtTime > 0 && now >= expiresAtTime) {
+          // 1 hour window expired! Automatically disband group and reset user state to idle
+          await fsFetch(`groups/${user.currentGroupId}?updateMask.fieldPaths=status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ fields: toFirestoreObject({ status: 'completed' }) })
+          }, token).catch(() => {});
+
+          await fsFetch(`users/${uid}?updateMask.fieldPaths=status&updateMask.fieldPaths=currentGroupId&updateMask.fieldPaths=currentRoomId&updateMask.fieldPaths=currentSpotId`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              fields: toFirestoreObject({ status: 'idle', currentGroupId: null, currentRoomId: null, currentSpotId: null })
+            })
+          }, token).catch(() => {});
+
+          return NextResponse.json({ status: 'idle', disbanded: true, reason: 'Meetup expired after 1 hour' });
+        }
+
+        return NextResponse.json({
+          status: 'matched',
+          group,
+          expiresAt: group.expiresAt || new Date(expiresAtTime).toISOString()
+        });
+      } catch (e) {
+        return NextResponse.json({ status: 'idle' });
+      }
     }
 
     if (user.status === 'waiting' && user.currentRoomId && user.currentSpotId) {
