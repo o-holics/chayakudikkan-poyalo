@@ -1,0 +1,46 @@
+name: Deploy to Vercel
+
+# Vercel's native Git integration is intentionally disconnected (org / plan
+# restriction). We build and deploy with the Vercel CLI instead.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      production:
+        description: "Deploy to production"
+        type: boolean
+        default: true
+
+concurrency:
+  group: vercel-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      PROD: ${{ github.event_name == 'push' || inputs.production }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=${{ env.PROD == 'true' && 'production' || 'preview' }} --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: vercel build ${{ env.PROD == 'true' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy
+        run: |
+          URL=$(vercel deploy --prebuilt ${{ env.PROD == 'true' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
+          echo "Deployed: $URL"
+          echo "### Deployed: $URL" >> "$GITHUB_STEP_SUMMARY"

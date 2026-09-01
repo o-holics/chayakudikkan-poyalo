@@ -1,0 +1,22 @@
+name: Matchmaker tick
+
+# Safety net for terminal transitions (form a partial table after the soft
+# window, close tables past their meet time) when no client is around to nudge.
+# The real-time path is still the client calling /api/pool/tick + /api/table/tick.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # GitHub's minimum; best-effort timing
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/cron/tick
+        run: |
+          curl -fsS --max-time 60 -X POST \
+            "https://${{ vars.APP_HOST }}/api/cron/tick" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' || echo "tick failed (non-fatal)"
