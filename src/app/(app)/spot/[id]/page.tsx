@@ -38,7 +38,7 @@ export default function SpotPage() {
 
   useEffect(() => {
     if (table) router.replace(`/table/${table.id}`);
-    else if (pool.mine) router.replace(`/waiting/${encodeURIComponent(spotId)}`);
+    else if (pool.mine) router.replace(`/waiting/${spotId}`);
   }, [table, pool.mine, spotId, router]);
 
   const join = async () => {
@@ -50,7 +50,7 @@ export default function SpotPage() {
         body: { spotId, spotName: spot?.name },
       });
       if (res.status === "seated" && res.tableId) router.replace(`/table/${res.tableId}`);
-      else router.replace(`/waiting/${encodeURIComponent(spotId)}`);
+      else router.replace(`/waiting/${spotId}`);
     } catch (e) {
       if (e instanceof ApiError && e.code === "ADMIN_NOT_CONFIGURED") {
         setError("Tables aren't switched on yet. Hang tight — this is being set up.");

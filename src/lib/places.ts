@@ -78,7 +78,8 @@ export async function fetchNearbySpots(point: LatLng, radiusM = NEARBY_RADIUS_M)
     const lng2 = el.lon ?? el.center?.lon;
     if (typeof lat2 !== "number" || typeof lng2 !== "number") continue;
 
-    const id = `osm:${el.type}/${el.id}`;
+    // Keep ids URL-safe and valid as Firestore doc ids (no ":" or "/").
+    const id = `osm_${el.type}_${el.id}`;
     if (seen.has(id)) continue;
     seen.add(id);
 

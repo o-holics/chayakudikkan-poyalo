@@ -132,7 +132,7 @@ export default function HomePage() {
               const waiting = counts[s.id] ?? 0;
               return (
                 <li key={s.id}>
-                  <Link href={`/spot/${encodeURIComponent(s.id)}`} className="flex items-center justify-between gap-4 py-4">
+                  <Link href={`/spot/${s.id}`} className="flex items-center justify-between gap-4 py-4">
                     <span className="min-w-0">
                       <span className="block truncate text-ink">{s.name}</span>
                       <span className="mt-0.5 block text-sm text-ink-soft">
