@@ -1,44 +1,64 @@
-'use client';
+"use client";
 
-import { useEffect, useState, createContext, useContext } from 'react';
-import { onIdTokenChanged, User } from 'firebase/auth';
-import { auth } from '@/lib/clientApp';
-import { useRouter } from 'next/navigation';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+import { onIdTokenChanged, signOut as fbSignOut, type User } from "firebase/auth";
+import { auth } from "@/lib/firebaseClient";
 
-interface AuthContextType {
+type AuthValue = {
   user: User | null;
   loading: boolean;
-}
+  getToken: () => Promise<string | null>;
+  signOut: () => Promise<void>;
+};
 
-const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
+const AuthContext = createContext<AuthValue>({
+  user: null,
+  loading: true,
+  getToken: async () => null,
+  signOut: async () => {},
+});
 
 export const useAuth = () => useContext(AuthContext);
+
+function setSessionHint(present: boolean) {
+  try {
+    document.cookie = present
+      ? "__session=1; path=/; max-age=3600; SameSite=Lax"
+      : "__session=; path=/; max-age=0; SameSite=Lax";
+  } catch {
+    /* ignore */
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        const token = await currentUser.getIdToken();
-        // Set the token as a cookie so Server Components can access it
-        document.cookie = `__session=${token}; path=/; max-age=3600; SameSite=Lax`;
-        setUser(currentUser);
-      } else {
-        document.cookie = '__session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        setUser(null);
-      }
+    return onIdTokenChanged(auth, async (u) => {
+      setUser(u);
       setLoading(false);
-      router.refresh(); // Refresh so server components re-evaluate with the new cookie
+      setSessionHint(Boolean(u));
     });
+  }, []);
 
-    return () => unsubscribe();
-  }, [router]);
+  const getToken = useCallback(async () => {
+    return auth.currentUser ? auth.currentUser.getIdToken() : null;
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await fbSignOut(auth);
+    setSessionHint(false);
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={{ user, loading, getToken, signOut }}>
       {children}
     </AuthContext.Provider>
   );

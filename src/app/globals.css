@@ -1,29 +1,70 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+/* ── Light is the identity ─────────────────────────────────────────── */
 :root {
-  --background: #0f0f13;
-  --foreground: #f1f1f1;
+  --paper: #f4f2ec;
+  --paper-raised: #fbfaf6;
+  --ink: #111111;
+  --ink-soft: #8a8a85;
+  --line: #e4e1d8;
+}
+
+/* System dark → night, unless the viewer forced day */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="day"]) {
+    --paper: #141312;
+    --paper-raised: #1d1b19;
+    --ink: #edeae2;
+    --ink-soft: #7c7a73;
+    --line: #2a2825;
+  }
+}
+
+/* Manual override wins in both directions */
+:root[data-theme="night"] {
+  --paper: #141312;
+  --paper-raised: #1d1b19;
+  --ink: #edeae2;
+  --ink-soft: #7c7a73;
+  --line: #2a2825;
+}
+:root[data-theme="day"] {
+  --paper: #f4f2ec;
+  --paper-raised: #fbfaf6;
+  --ink: #111111;
+  --ink-soft: #8a8a85;
+  --line: #e4e1d8;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: 'Inter', var(--font-geist-sans), sans-serif;
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mal: var(--font-mal), var(--font-inter), sans-serif;
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: 'Inter', Arial, Helvetica, sans-serif;
-  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-y: none;
 }
 
-@keyframes fade-in-up {
+/* Gentle entrances — the only motion in the app */
+@keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(16px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -31,6 +72,24 @@ body {
   }
 }
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.4s ease-out;
+.rise {
+  animation: rise 0.5s ease-out both;
+}
+.rise-slow {
+  animation: rise 0.85s ease-out both;
+}
+.rise-delay {
+  animation-delay: 0.12s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .rise-slow {
+    animation: none;
+  }
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--paper);
 }
