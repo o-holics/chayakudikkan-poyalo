@@ -11,6 +11,7 @@ import { unblockUser } from "@/lib/social";
 import { Screen, Stack, Title, QuietText, Button, Stepper, Divider } from "@/components/ui";
 import { Doodle } from "@/components/Doodle";
 import { AppTopBar } from "@/components/AppTopBar";
+import { LocationEditor } from "@/components/LocationEditor";
 import { cycleTheme, getThemeChoice, themeLabel, type ThemeChoice } from "@/lib/theme";
 import { SIZE_MAX, SIZE_MIN } from "@/lib/models";
 
@@ -63,8 +64,13 @@ export default function YouPage() {
       <Stack gap={2} className="mt-8">
         <Title>{profile?.displayName ?? "you"}</Title>
         <QuietText>{user?.email}</QuietText>
-        {profile?.areaLabel && <QuietText>📍 {profile.areaLabel}</QuietText>}
       </Stack>
+
+      {user && (
+        <div className="mt-6">
+          <LocationEditor uid={user.uid} profile={profile} />
+        </div>
+      )}
 
       <div className="mt-10">
         <p className="mb-3 text-xs uppercase tracking-wide text-ink-soft">shared cups</p>

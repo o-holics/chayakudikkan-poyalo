@@ -58,16 +58,19 @@ export async function GET(req: Request) {
         spots = docs.filter((d) => d.exists).map((d) => d.data() as TeaSpot);
       } else {
         spots = await fetchNearbySpots(center, radiusM);
-        const batch = db.batch();
-        for (const s of spots) batch.set(db.collection("teaSpots").doc(s.id), s, { merge: true });
-        batch.set(cacheRef, {
-          geohash: gh,
-          radiusKm,
-          center,
-          spotIds: spots.map((s) => s.id),
-          fetchedAt: Date.now(),
-        });
-        await batch.commit();
+        // Only cache a real result — never let an empty/degraded fetch stick for a week.
+        if (spots.length > 0) {
+          const batch = db.batch();
+          for (const s of spots) batch.set(db.collection("teaSpots").doc(s.id), s, { merge: true });
+          batch.set(cacheRef, {
+            geohash: gh,
+            radiusKm,
+            center,
+            spotIds: spots.map((s) => s.id),
+            fetchedAt: Date.now(),
+          });
+          await batch.commit();
+        }
       }
     } else {
       spots = await fetchNearbySpots(center, radiusM);

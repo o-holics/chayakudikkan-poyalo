@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api";
-import { DEFAULT_RADIUS_KM, RADIUS_MAX_KM, RADIUS_MIN_KM, type TeaSpot } from "./models";
+import { DEFAULT_RADIUS_KM, RADIUS_MAX_KM, RADIUS_MIN_KM, type Profile, type TeaSpot } from "./models";
 import { useProfile } from "./useProfile";
 
 export type NearbySpot = TeaSpot & { distanceM: number };
@@ -14,13 +14,72 @@ type NearbyResponse = {
   spots: NearbySpot[];
 };
 
-let cache: { spots: NearbySpot[]; areaLabel?: string } = { spots: [] };
+export type NearbyQuery = { lat: number; lng: number } | { q: string };
+
+function querySig(query: NearbyQuery, km: number): string {
+  const where =
+    "q" in query ? `q:${query.q.toLowerCase()}` : `${query.lat.toFixed(4)},${query.lng.toFixed(4)}`;
+  return `${where}@${km}`;
+}
+
+function profileQuery(p: Profile | null): NearbyQuery | null {
+  if (p?.homePoint) return { lat: p.homePoint.lat, lng: p.homePoint.lng };
+  if (p?.areaLabel) return { q: p.areaLabel };
+  return null;
+}
+
+// ── Persistent client cache ──────────────────────────────────────────
+// The shop list barely changes; keep it locally so reopening the app is
+// instant and doesn't hit the map API again. (Live waiting counts come
+// from a separate realtime listener, so staleness here is harmless.)
+const STORE_KEY = "chaya-nearby";
+const CLIENT_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+
+type NearbyCache = { spots: NearbySpot[]; areaLabel?: string; sig: string; fetchedAt: number };
+
+function loadCache(): NearbyCache {
+  if (typeof window === "undefined") return { spots: [], sig: "", fetchedAt: 0 };
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const c = JSON.parse(raw) as NearbyCache;
+      if (Array.isArray(c.spots) && typeof c.sig === "string") return c;
+    }
+  } catch {
+    /* ignore */
+  }
+  return { spots: [], sig: "", fetchedAt: 0 };
+}
+
+let cache: NearbyCache = loadCache();
+
+function saveCache(next: NearbyCache) {
+  cache = next;
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function cachedSpot(id: string): NearbySpot | undefined {
   return cache.spots.find((s) => s.id === id);
 }
 
-export type NearbyQuery = { lat: number; lng: number } | { q: string };
+export function resetNearbyCache() {
+  cache = { spots: [], sig: "", fetchedAt: 0 };
+  try {
+    localStorage.removeItem(STORE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
+function cacheHitFor(sig: string): boolean {
+  return cache.spots.length > 0 && cache.sig === sig && Date.now() - cache.fetchedAt < CLIENT_TTL_MS;
+}
+
+// ── Radius, remembered per device ────────────────────────────────────
 const RADIUS_KEY = "chaya-radius-km";
 
 function initialRadius(): number {
@@ -35,9 +94,9 @@ function initialRadius(): number {
 
 export function useNearby() {
   const { profile, loading: profileLoading } = useProfile();
-  const [spots, setSpots] = useState<NearbySpot[]>(cache.spots);
-  const [areaLabel, setAreaLabel] = useState<string | undefined>(cache.areaLabel);
-  const [loading, setLoading] = useState(cache.spots.length === 0);
+  const [spots, setSpots] = useState<NearbySpot[]>([]);
+  const [areaLabel, setAreaLabel] = useState<string | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [radiusKm, setRadiusKmState] = useState(DEFAULT_RADIUS_KM);
   const started = useRef(false);
@@ -48,16 +107,22 @@ export function useNearby() {
     setRadiusKmState(initialRadius());
   }, []);
 
-  const run = useCallback(async (query: NearbyQuery, km?: number) => {
+  const run = useCallback(async (query: NearbyQuery, km: number, force = false) => {
     lastQuery.current = query;
+    const sig = querySig(query, km);
+    if (!force && cacheHitFor(sig)) {
+      setSpots(cache.spots);
+      setAreaLabel(cache.areaLabel);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     const base =
       "q" in query ? `q=${encodeURIComponent(query.q)}` : `lat=${query.lat}&lng=${query.lng}`;
-    const kmParam = km ? `&radiusKm=${km}` : "";
     try {
-      const data = await apiFetch<NearbyResponse>(`/api/spots/nearby?${base}${kmParam}`);
-      cache = { spots: data.spots, areaLabel: data.areaLabel };
+      const data = await apiFetch<NearbyResponse>(`/api/spots/nearby?${base}&radiusKm=${km}`);
+      saveCache({ spots: data.spots, areaLabel: data.areaLabel, sig, fetchedAt: Date.now() });
       setSpots(data.spots);
       setAreaLabel(data.areaLabel);
     } catch (e) {
@@ -75,7 +140,7 @@ export function useNearby() {
       }
       setLoading(true);
       navigator.geolocation.getCurrentPosition(
-        (pos) => run({ lat: pos.coords.latitude, lng: pos.coords.longitude }, km ?? radiusKm),
+        (pos) => run({ lat: pos.coords.latitude, lng: pos.coords.longitude }, km ?? radiusKm, true),
         () => {
           setLoading(false);
           setError("Couldn't reach your location.");
@@ -103,16 +168,14 @@ export function useNearby() {
   useEffect(() => {
     if (started.current || profileLoading) return;
     started.current = true;
-    if (cache.spots.length) {
+    const km = initialRadius();
+    const pq = profileQuery(profile);
+    if (!pq) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }
-    const km = initialRadius();
-    if (profile?.homePoint) run({ lat: profile.homePoint.lat, lng: profile.homePoint.lng }, km);
-    else if (profile?.areaLabel) run({ q: profile.areaLabel }, km);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    else setLoading(false);
+    run(pq, km);
   }, [profile, profileLoading, run]);
 
   return {
@@ -121,7 +184,8 @@ export function useNearby() {
     loading,
     error,
     radiusKm,
-    run,
+    run: (q: NearbyQuery) => run(q, radiusKm, true),
+    refresh: () => lastQuery.current && run(lastQuery.current, radiusKm, true),
     locate,
     setRadiusKm,
     hasLocation: Boolean(profile?.homePoint || profile?.areaLabel),

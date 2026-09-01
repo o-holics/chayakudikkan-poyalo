@@ -57,8 +57,19 @@ export function adminAuth() {
   return getAuth(a);
 }
 
+let dbConfigured = false;
+
 export function adminDb() {
   const a = adminApp();
   if (!a) throw new Error("ADMIN_NOT_CONFIGURED");
-  return getFirestore(a);
+  const db = getFirestore(a);
+  if (!dbConfigured) {
+    try {
+      db.settings({ ignoreUndefinedProperties: true });
+    } catch {
+      /* settings can only be set once; fine if already applied */
+    }
+    dbConfigured = true;
+  }
+  return db;
 }
