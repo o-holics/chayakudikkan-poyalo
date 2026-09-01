@@ -66,12 +66,9 @@ export default function Landing() {
       </p>
 
       <BottomAction>
-        <Stack gap={3} className="items-center">
-          <Link href="/sign-in" className="w-full">
-            <Button full>begin</Button>
-          </Link>
-          <span className="text-xs text-ink-soft">chayakudikkanpoyalo.in</span>
-        </Stack>
+        <Link href="/sign-in" className="block w-full">
+          <Button full>begin</Button>
+        </Link>
       </BottomAction>
     </Screen>
   );
