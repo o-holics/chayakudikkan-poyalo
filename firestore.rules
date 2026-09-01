@@ -75,15 +75,6 @@ service cloud.firestore {
         );
       allow delete: if false;
 
-      match /friends/{other} {
-        allow read: if isUser(uid);
-        allow write: if isUser(uid);
-      }
-      match /friendRequests/{from} {
-        allow read: if isUser(uid);
-        allow create: if isUser(from) && request.resource.data.uid == from;
-        allow delete: if isUser(uid) || isUser(from);
-      }
       match /blocks/{other} {
         allow read: if isUser(uid);
         allow write: if isUser(uid);

@@ -6,8 +6,11 @@ export const SIZE_MAX = 6;
 export const DEFAULT_SIZE_MIN = 3;
 export const DEFAULT_SIZE_MAX = 5;
 
-/** Nearby search radius in metres. */
-export const NEARBY_RADIUS_M = 1500;
+/** Default nearby search radius in metres, and the range a person can widen to. */
+export const NEARBY_RADIUS_M = 2000;
+export const DEFAULT_RADIUS_KM = 2;
+export const RADIUS_MIN_KM = 1;
+export const RADIUS_MAX_KM = 15;
 /** How long a nearby-cache entry stays fresh. */
 export const NEARBY_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Soft window before a partial table (3–5) is formed. */
@@ -118,8 +121,6 @@ export type HistoryEntry = {
   at: number;
 };
 
-export type Friend = { uid: string; displayName: string; since: number };
-export type FriendRequest = { uid: string; displayName: string; createdAt: number };
 export type Blocked = { uid: string; displayName: string; blockedAt: number };
 
 export type SafetyReport = {

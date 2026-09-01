@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
+import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { Screen, Stack, Title, QuietText, Button, Field, Stepper, BottomAction } from "@/components/ui";
 import { Doodle } from "@/components/Doodle";
@@ -27,11 +28,14 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/welcome");
+    if (!loading && !user) router.replace("/");
   }, [loading, user, router]);
 
   useEffect(() => {
-    if (user?.displayName && !name) setName(user.displayName.split(" ")[0]);
+    if (user?.displayName && !name) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setName(user.displayName.split(" ")[0]);
+    }
   }, [user, name]);
 
   const askLocation = () => {
@@ -42,11 +46,19 @@ export default function OnboardingPage() {
     setLocating(true);
     setLocHint(null);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setArea("");
+      async (pos) => {
+        const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setCoords(here);
         setLocating(false);
-        setLocHint("got it");
+        setLocHint(null);
+        try {
+          const { label } = await apiFetch<{ label: string | null }>(
+            `/api/geo/reverse?lat=${here.lat}&lng=${here.lng}`,
+          );
+          if (label) setArea(label);
+        } catch {
+          /* keep the coords even if we can't name the place */
+        }
       },
       () => {
         setLocating(false);
@@ -132,8 +144,11 @@ export default function OnboardingPage() {
           <div className="mt-8">
             <Stack gap={4}>
               <Button variant="ghost" full onClick={askLocation} disabled={locating}>
-                {locating ? "finding you…" : coords ? "location shared ✓" : "use my location"}
+                {locating ? "finding you…" : coords ? "use my location ✓" : "use my location"}
               </Button>
+              {coords && area && (
+                <p className="text-sm text-ink">we&apos;ll look around {area}</p>
+              )}
               <div className="flex items-center gap-3 text-ink-soft">
                 <div className="h-px flex-1 bg-line" />
                 <span className="text-xs">or</span>
@@ -142,7 +157,7 @@ export default function OnboardingPage() {
               <Field
                 label="type an area"
                 placeholder="e.g. Fort Kochi"
-                value={area}
+                value={coords ? "" : area}
                 onChange={(e) => {
                   setArea(e.target.value);
                   if (e.target.value) setCoords(null);

@@ -1,33 +1,78 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { useProfile } from "@/lib/useProfile";
-import { Screen } from "@/components/ui";
-import { Doodle } from "@/components/Doodle";
+import { Screen, Stack, Title, QuietText, Button, BottomAction } from "@/components/ui";
+import { Doodle, type DoodleName } from "@/components/Doodle";
+import { Logo } from "@/components/Logo";
 
-export default function Entry() {
+const STEPS: { icon: DoodleName; text: string }[] = [
+  { icon: "pin", text: "Pick a tea shop near you." },
+  { icon: "chair", text: "Wait a little while a small table forms — three to six people." },
+  { icon: "cup", text: "You get a line from a Malayalam film to find each other by. Sip, talk, head home." },
+];
+
+export default function Landing() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
 
   useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      router.replace("/welcome");
-      return;
-    }
+    if (authLoading || !user) return;
     if (profileLoading) return;
     router.replace(profile ? "/home" : "/onboarding");
   }, [authLoading, profileLoading, user, profile, router]);
 
-  return (
-    <Screen center>
-      <div className="rise flex flex-col items-center gap-6">
-        <Doodle name="steam" size={60} className="text-ink-soft" />
+  if (user) {
+    return (
+      <Screen center>
         <p className="text-sm text-ink-soft">putting the kettle on…</p>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen>
+      <div className="pt-2">
+        <Logo full size={24} />
       </div>
+
+      <div className="mt-16 flex flex-col items-center text-center">
+        <Doodle name="cup" size={104} className="rise-slow text-ink" />
+        <Stack gap={4} className="rise rise-delay mt-8 items-center">
+          <Title>let&apos;s go for a tea</Title>
+          <QuietText className="max-w-[20rem]">
+            chayakudikkanpoyalo sits you down with a few people nearby for one cup of chai. You meet, and then you go home.
+          </QuietText>
+        </Stack>
+      </div>
+
+      <div className="mt-14">
+        <ol className="space-y-6">
+          {STEPS.map((s, i) => (
+            <li key={i} className="flex items-start gap-4">
+              <Doodle name={s.icon} size={30} className="mt-0.5 shrink-0 text-ink-soft" strokeWidth={4} />
+              <p className="text-sm leading-relaxed text-ink">{s.text}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <p className="mt-12 text-sm text-ink-soft">
+        No profiles, no follows, nothing to keep up with. Just the cup.
+      </p>
+
+      <BottomAction>
+        <Stack gap={3} className="items-center">
+          <Link href="/sign-in" className="w-full">
+            <Button full>begin</Button>
+          </Link>
+          <span className="text-xs text-ink-soft">chayakudikkanpoyalo.in</span>
+        </Stack>
+      </BottomAction>
     </Screen>
   );
 }

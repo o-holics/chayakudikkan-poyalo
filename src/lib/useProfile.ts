@@ -16,10 +16,12 @@ export function useProfile(): ProfileState {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfile(null);
       setLoading(false);
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     const unsub = onSnapshot(
       doc(db, "profiles", user.uid),

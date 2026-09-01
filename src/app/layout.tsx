@@ -17,14 +17,14 @@ const malayalam = Noto_Sans_Malayalam({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://chayakudikanpooyalo.in"),
+  metadataBase: new URL("https://chayakudikkanpoyalo.in"),
   title: {
-    default: "chayakudikanpooyalo",
-    template: "%s · chayakudikanpooyalo",
+    default: "chayakudikkanpoyalo — let's go for a tea",
+    template: "%s · chayakudikkanpoyalo",
   },
-  description: "A quiet way for late-night chai lovers to share a table.",
-  applicationName: "chayakudikanpooyalo",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "chaya" },
+  description: "A quiet way to share a cup of chai with a few people nearby. Meet, sip, head home.",
+  applicationName: "chayakudikkanpoyalo",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "chayakudikkanpoyalo" },
   manifest: "/manifest.webmanifest",
 };
 
