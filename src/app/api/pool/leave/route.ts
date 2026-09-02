@@ -1,5 +1,5 @@
 import { adminDb } from "@/lib/firebaseAdmin";
-import { SIZE_MIN } from "@/lib/models";
+import { RELAX_TIERS } from "@/lib/models";
 import { adminGate, isResponse, requireSession } from "@/lib/routeHelpers";
 
 export const runtime = "nodejs";
@@ -10,12 +10,12 @@ export async function POST(req: Request) {
   const gate = adminGate();
   if (gate) return gate;
 
-  const body = (await req.json().catch(() => ({}))) as { spotId?: string };
-  const spotId = body.spotId?.trim();
-  if (!spotId) return Response.json({ error: "Which spot?" }, { status: 400 });
+  const body = (await req.json().catch(() => ({}))) as { areaKey?: string; spotId?: string };
+  const areaKey = body.areaKey?.trim();
+  if (!areaKey) return Response.json({ error: "Which pool?" }, { status: 400 });
 
   const db = adminDb();
-  const poolRef = db.collection("matchPools").doc(spotId);
+  const poolRef = db.collection("matchPools").doc(areaKey);
   const waitingRef = poolRef.collection("waiting").doc(session.uid);
 
   await db.runTransaction(async (tx) => {
@@ -23,15 +23,17 @@ export async function POST(req: Request) {
     const all = await tx.get(poolRef.collection("waiting"));
     if (!mine.exists) return;
 
-    const remaining = all.size - 1;
+    const rest = all.docs.filter((d) => d.id !== session.uid).map((d) => d.data().joinedAt as number);
     tx.delete(waitingRef);
-
-    const patch: Record<string, unknown> = {
-      waitingCount: Math.max(0, remaining),
-      updatedAt: Date.now(),
-    };
-    if (remaining < SIZE_MIN) patch.formingDeadline = null;
-    tx.set(poolRef, patch, { merge: true });
+    tx.set(
+      poolRef,
+      {
+        waitingCount: rest.length,
+        formingDeadline: rest.length >= 2 ? Math.min(...rest) + RELAX_TIERS[1].afterMs : null,
+        updatedAt: Date.now(),
+      },
+      { merge: true },
+    );
   });
 
   return Response.json({ status: "left" });

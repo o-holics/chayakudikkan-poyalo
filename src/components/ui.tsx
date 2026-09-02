@@ -4,7 +4,10 @@ function cx(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
 }
 
-/** Full-height centered mobile column. */
+/**
+ * The app column. Mobile: a full-height single column. Desktop: the same
+ * column, sized comfortably and set inside a quiet paper panel.
+ */
 export function Screen({
   children,
   className,
@@ -15,15 +18,23 @@ export function Screen({
   center?: boolean;
 }) {
   return (
-    <main
+    <div
       className={cx(
-        "mx-auto flex min-h-dvh w-full max-w-[26rem] flex-col px-6 pb-10 pt-8",
-        center && "justify-center",
-        className,
+        "min-h-dvh w-full md:flex md:justify-center md:px-6 md:py-14",
+        center ? "md:items-center" : "md:items-start",
       )}
     >
-      {children}
-    </main>
+      <main
+        className={cx(
+          "mx-auto flex min-h-dvh w-full max-w-[26rem] flex-col px-6 pb-10 pt-8",
+          "md:min-h-0 md:max-w-[30rem] md:rounded-3xl md:border md:border-line md:bg-paper-raised md:px-10 md:pb-12 md:pt-10",
+          center && "justify-center",
+          className,
+        )}
+      >
+        {children}
+      </main>
+    </div>
   );
 }
 

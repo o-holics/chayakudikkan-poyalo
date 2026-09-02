@@ -1,6 +1,8 @@
 import { adminDb } from "@/lib/firebaseAdmin";
+import { geohash } from "@/lib/geo";
+import { bumpInterest } from "@/lib/interest";
 import { runPoolPass } from "@/lib/matching";
-import { DEFAULT_SIZE_MAX, DEFAULT_SIZE_MIN } from "@/lib/models";
+import { AREA_GEOHASH_PRECISION, DEFAULT_SIZE_MAX, DEFAULT_SIZE_MIN } from "@/lib/models";
 import { adminGate, isResponse, requireSession } from "@/lib/routeHelpers";
 
 export const runtime = "nodejs";
@@ -11,7 +13,11 @@ export async function POST(req: Request) {
   const gate = adminGate();
   if (gate) return gate;
 
-  const body = (await req.json().catch(() => ({}))) as { spotId?: string; spotName?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    spotId?: string;
+    spotName?: string;
+    point?: { lat: number; lng: number };
+  };
   const spotId = body.spotId?.trim();
   if (!spotId) return Response.json({ error: "Which spot?" }, { status: 400 });
 
@@ -34,17 +40,24 @@ export async function POST(req: Request) {
     }
   }
 
-  const spotName: string =
-    (spotSnap.exists && (spotSnap.data()!.name as string)) || body.spotName?.trim() || "a tea shop";
+  const spot = spotSnap.exists ? spotSnap.data()! : null;
+  const spotName: string = (spot?.name as string) || body.spotName?.trim() || "a tea shop";
+  const point = body.point ?? (spot ? { lat: spot.lat as number, lng: spot.lng as number } : null);
+  if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
+    return Response.json({ error: "Couldn't place that spot on the map." }, { status: 400 });
+  }
+
+  const areaKey = geohash(point.lat, point.lng, AREA_GEOHASH_PRECISION);
   const blockedUids = blocksSnap.docs.map((d) => d.id);
 
-  const poolRef = db.collection("matchPools").doc(spotId);
+  await bumpInterest(db, spotId, spotName);
+
+  const poolRef = db.collection("matchPools").doc(areaKey);
   const waitingRef = poolRef.collection("waiting").doc(session.uid);
 
   await db.runTransaction(async (tx) => {
     const existing = await tx.get(waitingRef);
-    const poolSnap = await tx.get(poolRef);
-    const currentCount = poolSnap.exists ? (poolSnap.data()!.waitingCount ?? 0) : 0;
+    const all = await tx.get(poolRef.collection("waiting"));
 
     if (!existing.exists) {
       tx.set(waitingRef, {
@@ -53,30 +66,25 @@ export async function POST(req: Request) {
         joinedAt: now,
         sizeMin: profile.sizeMin ?? DEFAULT_SIZE_MIN,
         sizeMax: profile.sizeMax ?? DEFAULT_SIZE_MAX,
+        relaxedMin: null,
+        spotId,
+        spotName,
+        point,
         blockedUids,
       });
     }
-
     tx.set(
       poolRef,
-      {
-        spotId,
-        spotName,
-        waitingCount: existing.exists ? currentCount : currentCount + 1,
-        updatedAt: now,
-      },
+      { areaKey, waitingCount: existing.exists ? all.size : all.size + 1, updatedAt: now },
       { merge: true },
     );
   });
 
-  // Try to seat straight away (only forms a full-ish table).
-  let formed = await runPoolPass(db, spotId, spotName, "eager");
-  if (formed && !formed.uids.includes(session.uid)) {
-    formed = await runPoolPass(db, spotId, spotName, "eager");
-  }
+  let formed = await runPoolPass(db, areaKey);
+  if (formed && !formed.uids.includes(session.uid)) formed = await runPoolPass(db, areaKey);
 
   if (formed?.uids.includes(session.uid)) {
     return Response.json({ status: "seated", tableId: formed.tableId });
   }
-  return Response.json({ status: "waiting", spotId });
+  return Response.json({ status: "waiting", areaKey });
 }

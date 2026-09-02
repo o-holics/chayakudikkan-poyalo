@@ -25,13 +25,19 @@ service cloud.firestore {
     }
 
     // ── Server-owned: matching pools (counts only, no private data) ──
-    match /matchPools/{spotId} {
+    match /matchPools/{areaKey} {
       allow read: if signedIn();
       allow write: if false;
       match /waiting/{uid} {
         allow read: if signedIn();
         allow write: if false;
       }
+    }
+
+    // ── Server-owned: "people looked here today" counters ───────────
+    match /interest/{spotId} {
+      allow read: if signedIn();
+      allow write: if false;
     }
 
     // ── Tables: readable by their members; chat + presence by members ─

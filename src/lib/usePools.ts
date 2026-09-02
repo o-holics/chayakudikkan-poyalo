@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebaseClient";
 import { useAuth } from "@/components/AuthProvider";
+import { INTEREST_WINDOW_MS } from "./models";
 
-/** Live { spotId -> waitingCount } across all pools. */
+/** Live { areaKey -> waitingCount } across all pools. */
 export function usePoolCounts(): Record<string, number> {
   const { user } = useAuth();
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -29,38 +30,71 @@ export function usePoolCounts(): Record<string, number> {
   return counts;
 }
 
+/** Live { spotId -> hits today } from the interest counters. */
+export function useSpotInterest(): Record<string, number> {
+  const { user } = useAuth();
+  const [interest, setInterest] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!user) return;
+    return onSnapshot(
+      collection(db, "interest"),
+      (snap) => {
+        const now = Date.now();
+        const next: Record<string, number> = {};
+        snap.forEach((d) => {
+          const v = d.data();
+          const fresh = now - ((v.since as number) ?? 0) < INTEREST_WINDOW_MS;
+          if (fresh && (v.hits as number) > 0) next[d.id] = v.hits as number;
+        });
+        setInterest(next);
+      },
+      () => setInterest({}),
+    );
+  }, [user]);
+
+  return interest;
+}
+
 export type PoolStatus = {
-  spotName: string | null;
   count: number;
   formingDeadline: number | null;
-  waiters: { displayName: string }[];
+  waiters: { displayName: string; spotName: string }[];
+  spotNames: string[];
   mine: boolean;
+  myJoinedAt: number | null;
+  myRelaxed: boolean;
   loading: boolean;
 };
 
-/** Live status of one pool + its waiting list. */
-export function usePoolStatus(spotId: string): PoolStatus {
+/** Live status of one area pool + its waiting list. */
+export function usePoolStatus(areaKey: string | null): PoolStatus {
   const { user } = useAuth();
-  const [spotName, setSpotName] = useState<string | null>(null);
-  const [count, setCount] = useState(0);
   const [formingDeadline, setDeadline] = useState<number | null>(null);
-  const [waiters, setWaiters] = useState<{ displayName: string }[]>([]);
+  const [waiters, setWaiters] = useState<{ displayName: string; spotName: string }[]>([]);
   const [mine, setMine] = useState(false);
+  const [myJoinedAt, setMyJoinedAt] = useState<number | null>(null);
+  const [myRelaxed, setMyRelaxed] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || !spotId) return;
-    const unsubPool = onSnapshot(doc(db, "matchPools", spotId), (snap) => {
-      const d = snap.data();
-      setSpotName((d?.spotName as string) ?? null);
-      setCount((d?.waitingCount as number) ?? 0);
-      setDeadline((d?.formingDeadline as number | null) ?? null);
+    if (!user || !areaKey) return;
+    const unsubPool = onSnapshot(doc(db, "matchPools", areaKey), (snap) => {
+      setDeadline((snap.data()?.formingDeadline as number | null) ?? null);
     });
     const unsubWaiting = onSnapshot(
-      collection(db, "matchPools", spotId, "waiting"),
+      collection(db, "matchPools", areaKey, "waiting"),
       (snap) => {
-        setWaiters(snap.docs.map((x) => ({ displayName: (x.data().displayName as string) ?? "someone" })));
-        setMine(snap.docs.some((x) => x.id === user.uid));
+        setWaiters(
+          snap.docs.map((x) => ({
+            displayName: (x.data().displayName as string) ?? "someone",
+            spotName: (x.data().spotName as string) ?? "",
+          })),
+        );
+        const me = snap.docs.find((x) => x.id === user.uid);
+        setMine(Boolean(me));
+        setMyJoinedAt((me?.data().joinedAt as number) ?? null);
+        setMyRelaxed(me?.data().relaxedMin != null);
         setLoading(false);
       },
       () => setLoading(false),
@@ -69,7 +103,21 @@ export function usePoolStatus(spotId: string): PoolStatus {
       unsubPool();
       unsubWaiting();
     };
-  }, [user, spotId]);
+  }, [user, areaKey]);
 
-  return { spotName, count, formingDeadline, waiters, mine, loading };
+  const spotNames = useMemo(
+    () => Array.from(new Set(waiters.map((w) => w.spotName).filter(Boolean))),
+    [waiters],
+  );
+
+  return {
+    count: waiters.length,
+    formingDeadline,
+    waiters,
+    spotNames,
+    mine,
+    myJoinedAt,
+    myRelaxed,
+    loading,
+  };
 }

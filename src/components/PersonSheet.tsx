@@ -43,7 +43,10 @@ export function PersonSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 p-4 md:items-center"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-[26rem] rounded-2xl border border-line bg-paper p-6"
         onClick={(e) => e.stopPropagation()}

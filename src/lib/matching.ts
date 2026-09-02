@@ -1,11 +1,11 @@
 import "server-only";
-import { FieldValue, type Firestore, Timestamp } from "firebase-admin/firestore";
+import { Timestamp, type Firestore } from "firebase-admin/firestore";
+import { distanceMeters } from "./geo";
 import { randomLine } from "./lines";
 import {
-  FORMING_WINDOW_MS,
   MEET_WINDOW_MS,
+  RELAX_TIERS,
   SIZE_MAX,
-  SIZE_MIN,
   TABLE_TTL_MS,
   type PoolWaiter,
   type TableMember,
@@ -13,106 +13,130 @@ import {
 
 export type Waiter = PoolWaiter;
 
-/** Do two waiters have a block edge either way? */
 function blocked(a: Waiter, b: Waiter): boolean {
-  return a.blockedUids?.includes(b.uid) || b.blockedUids?.includes(a.uid);
+  return Boolean(a.blockedUids?.includes(b.uid) || b.blockedUids?.includes(a.uid));
 }
 
-/**
- * Choose who sits, oldest first, skipping block conflicts. Returns the seated
- * slice (3..6) whose size suits every member, or null if no table is possible.
- */
-export function chooseSeating(waiters: Waiter[]): Waiter[] | null {
-  const ordered = [...waiters].sort((a, b) => a.joinedAt - b.joinedAt);
+/** The smallest table this waiter will accept (their choice, or their opt-in relax). */
+function minFor(w: Waiter): number {
+  return Math.max(2, w.relaxedMin ?? w.sizeMin);
+}
 
-  const chosen: Waiter[] = [];
-  for (const w of ordered) {
-    if (chosen.length >= SIZE_MAX) break;
-    if (chosen.some((c) => blocked(c, w))) continue;
-    chosen.push(w);
+export type PlannedGroup = { members: Waiter[]; spotId: string; spotName: string };
+
+/**
+ * Where the group meets. If most of them picked the same spot, that one.
+ * Otherwise the proposed spot that's most central to everyone.
+ */
+function pickSpot(members: Waiter[]): { spotId: string; spotName: string } {
+  const votes = new Map<string, { name: string; n: number }>();
+  for (const m of members) {
+    const v = votes.get(m.spotId) ?? { name: m.spotName, n: 0 };
+    v.n += 1;
+    votes.set(m.spotId, v);
   }
 
-  for (let n = Math.min(SIZE_MAX, chosen.length); n >= SIZE_MIN; n--) {
-    const slice = chosen.slice(0, n);
-    if (slice.every((w) => n >= w.sizeMin && n <= w.sizeMax)) return slice;
+  let top: [string, { name: string; n: number }] | undefined;
+  for (const entry of votes) if (!top || entry[1].n > top[1].n) top = entry;
+  if (top && top[1].n > members.length / 2) return { spotId: top[0], spotName: top[1].name };
+
+  let pick = [...votes.keys()][0];
+  let pickName = votes.get(pick)!.name;
+  let bestSum = Infinity;
+  for (const candidate of votes.keys()) {
+    const p = members.find((m) => m.spotId === candidate)!.point;
+    const sum = members.reduce((acc, m) => acc + distanceMeters(p, m.point), 0);
+    if (sum < bestSum) {
+      bestSum = sum;
+      pick = candidate;
+      pickName = votes.get(candidate)!.name;
+    }
+  }
+  return { spotId: pick, spotName: pickName };
+}
+
+function buildGroup(waiters: Waiter[], clusterM: number): PlannedGroup | null {
+  const ordered = [...waiters].sort((a, b) => a.joinedAt - b.joinedAt);
+
+  for (const seed of ordered) {
+    const near = ordered
+      .filter(
+        (w) => w.uid !== seed.uid && !blocked(seed, w) && distanceMeters(seed.point, w.point) <= clusterM,
+      )
+      .sort((a, b) => {
+        const pa = a.spotId === seed.spotId ? 0 : 1;
+        const pb = b.spotId === seed.spotId ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        const da = distanceMeters(seed.point, a.point);
+        const db = distanceMeters(seed.point, b.point);
+        if (da !== db) return da - db;
+        return a.joinedAt - b.joinedAt;
+      });
+
+    const chosen: Waiter[] = [seed];
+    for (const w of near) {
+      if (chosen.length >= SIZE_MAX) break;
+      if (chosen.some((c) => blocked(c, w))) continue;
+      if (chosen.length + 1 > Math.min(...chosen.concat(w).map((x) => x.sizeMax))) continue;
+      chosen.push(w);
+    }
+
+    const cap = Math.min(SIZE_MAX, ...chosen.map((x) => x.sizeMax));
+    for (let n = Math.min(cap, chosen.length); n >= 2; n -= 1) {
+      const slice = chosen.slice(0, n);
+      if (n < Math.max(...slice.map(minFor))) continue;
+      return { members: slice, ...pickSpot(slice) };
+    }
   }
   return null;
 }
 
-type FormResult = { tableId: string; uids: string[] } | null;
+/** Form the best table possible right now, widening the search the longer people have waited. */
+export function planGroup(waiters: Waiter[], now = Date.now()): PlannedGroup | null {
+  if (waiters.length < 2) return null;
+  const oldest = Math.min(...waiters.map((w) => w.joinedAt));
+  const waited = now - oldest;
+  const tier = [...RELAX_TIERS].reverse().find((t) => waited >= t.afterMs) ?? RELAX_TIERS[0];
+  return buildGroup(waiters, tier.clusterM);
+}
 
-/**
- * One matching pass for a spot, inside a transaction.
- * mode "eager" (on join): only forms when a table of ≥5 is ready, or the whole
- * pool forms one happy table. mode "deadline" (on tick): forms the best table
- * it can once the soft window has passed.
- */
-export async function runPoolPass(
-  db: Firestore,
-  spotId: string,
-  spotName: string,
-  mode: "eager" | "deadline",
-  now = Date.now(),
-): Promise<FormResult> {
-  const poolRef = db.collection("matchPools").doc(spotId);
+export type FormResult = { tableId: string; uids: string[] } | null;
+
+/** One matching pass over an area pool, in a transaction. */
+export async function runPoolPass(db: Firestore, areaKey: string, now = Date.now()): Promise<FormResult> {
+  const poolRef = db.collection("matchPools").doc(areaKey);
   const waitingCol = poolRef.collection("waiting");
 
   return db.runTransaction(async (tx) => {
-    const poolSnap = await tx.get(poolRef);
     const waitingSnap = await tx.get(waitingCol.orderBy("joinedAt"));
     const waiters = waitingSnap.docs.map((d) => d.data() as Waiter);
 
-    const pool = poolSnap.exists ? poolSnap.data()! : null;
-    const deadline: number | null = pool?.formingDeadline ?? null;
-
-    const patchPool = (formedCount: number) => {
-      const remaining = waiters.length - formedCount;
+    const patchPool = (removed: string[]) => {
+      const remaining = waiters.filter((w) => !removed.includes(w.uid));
       const nextDeadline =
-        remaining >= SIZE_MIN
-          ? formedCount > 0
-            ? now + FORMING_WINDOW_MS
-            : (deadline ?? now + FORMING_WINDOW_MS)
+        remaining.length >= 2
+          ? Math.min(...remaining.map((w) => w.joinedAt)) + RELAX_TIERS[1].afterMs
           : null;
       tx.set(
         poolRef,
-        {
-          spotId,
-          spotName,
-          waitingCount: remaining,
-          formingDeadline: nextDeadline,
-          lockUntil: null,
-          updatedAt: now,
-        },
+        { areaKey, waitingCount: remaining.length, formingDeadline: nextDeadline, updatedAt: now },
         { merge: true },
       );
     };
 
-    if (waiters.length < SIZE_MIN) {
-      patchPool(0);
-      return null;
-    }
-
-    const seating = chooseSeating(waiters);
-
-    const shouldForm =
-      seating !== null &&
-      (mode === "deadline"
-        ? deadline !== null && now >= deadline
-        : seating.length >= 5 || seating.length === waiters.length);
-
-    if (!seating || !shouldForm) {
-      patchPool(0);
+    const plan = planGroup(waiters, now);
+    if (!plan) {
+      patchPool([]);
       return null;
     }
 
     const tableId = `t_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-    const tableRef = db.collection("teaTables").doc(tableId);
-    const members: TableMember[] = seating.map((w) => ({ uid: w.uid, displayName: w.displayName }));
+    const members: TableMember[] = plan.members.map((w) => ({ uid: w.uid, displayName: w.displayName }));
     const line = randomLine();
 
-    tx.set(tableRef, {
-      spotId,
-      spotName,
+    tx.set(db.collection("teaTables").doc(tableId), {
+      spotId: plan.spotId,
+      spotName: plan.spotName,
       memberUids: members.map((m) => m.uid),
       members,
       line,
@@ -122,14 +146,10 @@ export async function runPoolPass(
       expiresAt: now + TABLE_TTL_MS,
     });
 
-    for (const w of seating) {
-      tx.set(
-        db.collection("profiles").doc(w.uid),
-        { activeTableId: tableId },
-        { merge: true },
-      );
+    for (const w of plan.members) {
+      tx.set(db.collection("profiles").doc(w.uid), { activeTableId: tableId }, { merge: true });
       tx.set(db.collection("profiles").doc(w.uid).collection("history").doc(tableId), {
-        spotName,
+        spotName: plan.spotName,
         line,
         members,
         outcome: "active",
@@ -138,7 +158,7 @@ export async function runPoolPass(
       tx.delete(waitingCol.doc(w.uid));
     }
 
-    patchPool(seating.length);
+    patchPool(members.map((m) => m.uid));
     return { tableId, uids: members.map((m) => m.uid) };
   });
 }
@@ -148,5 +168,3 @@ export function tsToMs(v: unknown): number {
   if (typeof v === "number") return v;
   return 0;
 }
-
-export { FieldValue, SIZE_MIN, SIZE_MAX };

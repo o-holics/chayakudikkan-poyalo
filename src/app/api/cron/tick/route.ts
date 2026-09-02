@@ -21,13 +21,11 @@ export async function POST(req: Request) {
 
   const pools = await db
     .collection("matchPools")
-    .where("formingDeadline", "<=", now)
+    .where("waitingCount", ">=", 2)
     .limit(50)
     .get();
   for (const p of pools.docs) {
-    const d = p.data();
-    if ((d.waitingCount ?? 0) < 3) continue;
-    const res = await runPoolPass(db, p.id, d.spotName ?? "a tea shop", "deadline", now).catch(() => null);
+    const res = await runPoolPass(db, p.id, now).catch(() => null);
     if (res) formed++;
   }
 

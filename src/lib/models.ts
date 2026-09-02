@@ -5,6 +5,24 @@ export const SIZE_MIN = 3;
 export const SIZE_MAX = 6;
 export const DEFAULT_SIZE_MIN = 3;
 export const DEFAULT_SIZE_MAX = 5;
+/** Only ever reached when a waiter opts in to a smaller table. */
+export const RELAXED_MIN = 2;
+
+/** Pools are city-sized; proximity grouping happens inside them. */
+export const AREA_GEOHASH_PRECISION = 4;
+
+/** Progressive relaxation tiers, keyed by how long the oldest waiter has waited. */
+export const RELAX_TIERS = [
+  { afterMs: 0, clusterM: 1800, needTarget: true },
+  { afterMs: 150 * 1000, clusterM: 3500, needTarget: false },
+  { afterMs: 5 * 60 * 1000, clusterM: 9000, needTarget: false },
+] as const;
+
+/** After this long still short of a table, offer the waiter a smaller table. */
+export const OFFER_RELAX_AFTER_MS = 3 * 60 * 1000;
+
+/** A day's "people looked here" counter resets after this. */
+export const INTEREST_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /** Default nearby search radius in metres, and the range a person can widen to. */
 export const NEARBY_RADIUS_M = 2000;
@@ -61,16 +79,28 @@ export type PoolWaiter = {
   joinedAt: number;
   sizeMin: number;
   sizeMax: number;
+  /** Set only when the waiter opts in to a smaller table. */
+  relaxedMin?: number | null;
+  /** The spot this person picked — honoured when the group agrees. */
+  spotId: string;
+  spotName: string;
+  point: LatLng;
   blockedUids: string[];
 };
 
 export type MatchPool = {
-  spotId: string;
-  spotName: string;
+  areaKey: string;
   waitingCount: number;
   formingDeadline: number | null;
   lockUntil: number | null;
   updatedAt: number;
+};
+
+export type SpotInterest = {
+  spotId: string;
+  spotName: string;
+  hits: number;
+  since: number;
 };
 
 export type Line = {

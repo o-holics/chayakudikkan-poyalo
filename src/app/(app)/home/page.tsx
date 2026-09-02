@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { useProfile } from "@/lib/useProfile";
 import { useNearby } from "@/lib/useNearby";
-import { usePoolCounts } from "@/lib/usePools";
+import { usePoolCounts, useSpotInterest } from "@/lib/usePools";
 import { useActiveTable } from "@/lib/useActiveTable";
-import { prettyDistance } from "@/lib/geo";
-import { RADIUS_MAX_KM, RADIUS_MIN_KM } from "@/lib/models";
+import { geohash, prettyDistance } from "@/lib/geo";
+import { AREA_GEOHASH_PRECISION, RADIUS_MAX_KM, RADIUS_MIN_KM } from "@/lib/models";
 import { Screen, Stack, Title, QuietText, Button, Field } from "@/components/ui";
 import { Doodle } from "@/components/Doodle";
 import { AppTopBar } from "@/components/AppTopBar";
@@ -54,9 +54,22 @@ export default function HomePage() {
   const { table } = useActiveTable();
   const { spots, areaLabel, loading, error, radiusKm, run, locate, setRadiusKm, hasLocation } = useNearby();
   const counts = usePoolCounts();
+  const interest = useSpotInterest();
 
   const [area, setArea] = useState("");
   const [changing, setChanging] = useState(false);
+
+  const areaKeys = Array.from(
+    new Set(spots.map((s) => geohash(s.lat, s.lng, AREA_GEOHASH_PRECISION))),
+  );
+  const waitingNearby = areaKeys.reduce((n, k) => n + (counts[k] ?? 0), 0);
+  const lookedNearby = spots.reduce((n, s) => n + (interest[s.id] ?? 0), 0);
+  const liquidity =
+    waitingNearby > 0
+      ? `${waitingNearby} ${waitingNearby === 1 ? "person is" : "people are"} waiting for tea near you now`
+      : lookedNearby > 2
+        ? `${lookedNearby} people looked for tea near you today`
+        : null;
 
   useEffect(() => {
     if (authLoading) return;
@@ -75,6 +88,7 @@ export default function HomePage() {
         {!table && (
           <QuietText>{areaLabel ? `Tea near ${areaLabel}.` : "Pick a spot and wait for a small table."}</QuietText>
         )}
+        {!table && liquidity && <QuietText>{liquidity}.</QuietText>}
       </Stack>
 
       {table ? (
@@ -129,7 +143,7 @@ export default function HomePage() {
 
           <ul className="mt-2 divide-y divide-line">
             {spots.map((s) => {
-              const waiting = counts[s.id] ?? 0;
+              const waiting = counts[geohash(s.lat, s.lng, AREA_GEOHASH_PRECISION)] ?? 0;
               return (
                 <li key={s.id}>
                   <Link href={`/spot/${s.id}`} className="flex items-center justify-between gap-4 py-4">
@@ -137,7 +151,7 @@ export default function HomePage() {
                       <span className="block truncate text-ink">{s.name}</span>
                       <span className="mt-0.5 block text-sm text-ink-soft">
                         {prettyDistance(s.distanceM)}
-                        {waiting > 0 && ` · ${waiting} waiting`}
+                        {waiting > 0 && ` · ${waiting} waiting near here`}
                       </span>
                     </span>
                     <span className="text-ink-soft">→</span>

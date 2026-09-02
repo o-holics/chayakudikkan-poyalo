@@ -1,56 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
 import { apiFetch, ApiError } from "@/lib/api";
+import { geohash } from "@/lib/geo";
+import { AREA_GEOHASH_PRECISION, type TeaSpot } from "@/lib/models";
 import { cachedSpot, type NearbySpot } from "@/lib/useNearby";
-import { usePoolStatus } from "@/lib/usePools";
+import { usePoolStatus, useSpotInterest } from "@/lib/usePools";
 import { useActiveTable } from "@/lib/useActiveTable";
 import { Screen, Stack, Title, QuietText, Button, BottomAction } from "@/components/ui";
 import { Doodle } from "@/components/Doodle";
 import { AppTopBar } from "@/components/AppTopBar";
-import type { TeaSpot } from "@/lib/models";
 
 export default function SpotPage() {
   const router = useRouter();
-  const params = useParams<{ id: string }>();
-  const spotId = params.id;
+  const { id: spotId } = useParams<{ id: string }>();
 
   const [spot, setSpot] = useState<(TeaSpot | NearbySpot) | null>(() => cachedSpot(spotId) ?? null);
   const [notFound, setNotFound] = useState(false);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const areaKey = useMemo(
+    () => (spot ? geohash(spot.lat, spot.lng, AREA_GEOHASH_PRECISION) : null),
+    [spot],
+  );
+
   const { table } = useActiveTable();
-  const pool = usePoolStatus(spotId);
+  const pool = usePoolStatus(areaKey);
+  const interest = useSpotInterest();
+  const lookedToday = interest[spotId] ?? 0;
 
   useEffect(() => {
     if (spot) return;
     getDoc(doc(db, "teaSpots", spotId))
-      .then((snap) => {
-        if (snap.exists()) setSpot(snap.data() as TeaSpot);
-        else setNotFound(true);
-      })
+      .then((snap) => (snap.exists() ? setSpot(snap.data() as TeaSpot) : setNotFound(true)))
       .catch(() => setNotFound(true));
   }, [spot, spotId]);
 
   useEffect(() => {
     if (table) router.replace(`/table/${table.id}`);
-    else if (pool.mine) router.replace(`/waiting/${spotId}`);
-  }, [table, pool.mine, spotId, router]);
+    else if (areaKey && pool.mine) router.replace(`/waiting/${areaKey}`);
+  }, [table, pool.mine, areaKey, router]);
 
   const join = async () => {
+    if (!spot) return;
     setJoining(true);
     setError(null);
     try {
-      const res = await apiFetch<{ status: string; tableId?: string }>("/api/pool/join", {
+      const res = await apiFetch<{ status: string; tableId?: string; areaKey?: string }>("/api/pool/join", {
         method: "POST",
-        body: { spotId, spotName: spot?.name },
+        body: { spotId, spotName: spot.name, point: { lat: spot.lat, lng: spot.lng } },
       });
       if (res.status === "seated" && res.tableId) router.replace(`/table/${res.tableId}`);
-      else router.replace(`/waiting/${spotId}`);
+      else router.replace(`/waiting/${res.areaKey ?? areaKey}`);
     } catch (e) {
       if (e instanceof ApiError && e.code === "ADMIN_NOT_CONFIGURED") {
         setError("Tables aren't switched on yet. Hang tight — this is being set up.");
@@ -73,6 +78,8 @@ export default function SpotPage() {
     );
   }
 
+  const nearbyWaiting = pool.count;
+
   return (
     <Screen>
       <AppTopBar back="/home" />
@@ -83,14 +90,18 @@ export default function SpotPage() {
           <Title>{spot?.name ?? "…"}</Title>
           {spot?.address && <QuietText>{spot.address}</QuietText>}
           <QuietText>
-            {pool.count > 0 ? `${pool.count} already waiting here.` : "No one waiting yet — you could be first."}
+            {nearbyWaiting > 0
+              ? `${nearbyWaiting} ${nearbyWaiting === 1 ? "person is" : "people are"} waiting for tea near here right now.`
+              : lookedToday > 1
+                ? `${lookedToday} people looked for tea here today — worth a wait.`
+                : "Quiet right now. Wait here and we'll widen the search as time passes."}
           </QuietText>
         </Stack>
 
         {error && <p className="mt-6 text-sm text-ink">{error}</p>}
 
         <BottomAction>
-          <Button full disabled={joining} onClick={join}>
+          <Button full disabled={joining || !spot} onClick={join}>
             {joining ? "sitting down…" : "wait here for a table"}
           </Button>
         </BottomAction>
