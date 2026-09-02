@@ -22,16 +22,16 @@ export function Screen({
   return (
     <div
       className={cx(
-        "min-h-dvh w-full md:flex md:justify-center md:px-6 md:py-10",
-        center ? "md:items-center" : "md:items-start",
+        "min-h-dvh w-full bg-paper text-ink transition-colors",
+        center && "flex flex-col items-center justify-center",
       )}
     >
       <main
         className={cx(
-          "mx-auto flex min-h-dvh w-full flex-col px-6 pb-10 pt-8",
+          "mx-auto flex min-h-dvh w-full flex-col px-4 pb-12 pt-6 sm:px-6 md:px-8",
           wide
-            ? "max-w-[26rem] md:max-w-3xl lg:max-w-5xl md:min-h-0 md:rounded-3xl md:border md:border-line md:bg-paper-raised md:px-10 md:pb-12 md:pt-10"
-            : "max-w-[26rem] md:max-w-[30rem] md:min-h-0 md:rounded-3xl md:border md:border-line md:bg-paper-raised md:px-10 md:pb-12 md:pt-10",
+            ? "max-w-full md:max-w-4xl lg:max-w-6xl md:pt-8"
+            : "max-w-[28rem] md:max-w-xl md:pt-10",
           center && "justify-center",
           className,
         )}
