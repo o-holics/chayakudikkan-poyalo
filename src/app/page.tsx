@@ -10,9 +10,9 @@ import { Doodle, type DoodleName } from "@/components/Doodle";
 import { Logo } from "@/components/Logo";
 
 const STEPS: { icon: DoodleName; text: string }[] = [
-  { icon: "pin", text: "Pick a tea shop near you." },
-  { icon: "chair", text: "Wait a little while a small table forms — three to six people." },
-  { icon: "cup", text: "You get a line from a Malayalam film to find each other by. Sip, talk, head home." },
+  { icon: "moon", text: "Say when you're up for tea. That's it — close the app." },
+  { icon: "chair", text: "We gather three to six people nearby and pick the spot, locked in 45 minutes before." },
+  { icon: "cup", text: "You get a line from a Malayalam film to find each other by. Sip, and head home." },
 ];
 
 export default function Landing() {

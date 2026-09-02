@@ -19,19 +19,23 @@ export function usePendingIntent(): { intent: TeaIntent | null; loading: boolean
       setLoading(false);
       return;
     }
-    const q = query(
-      collection(db, "teaIntents"),
-      where("uid", "==", user.uid),
-      where("status", "==", "pending"),
-    );
+    // Single equality filter — needs no composite index. Status is filtered
+    // client-side so the card shows even before indexes are deployed.
+    const q = query(collection(db, "teaIntents"), where("uid", "==", user.uid));
     return onSnapshot(
       q,
       (snap) => {
-        const d = snap.docs[0];
-        setIntent(d ? ({ id: d.id, ...(d.data() as Omit<TeaIntent, "id">) }) : null);
+        const rows = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<TeaIntent, "id">) }))
+          .filter((r) => r.status === "pending")
+          .sort((a, b) => b.createdAt - a.createdAt);
+        setIntent(rows[0] ?? null);
         setLoading(false);
       },
-      () => setLoading(false),
+      (err) => {
+        console.error("[usePendingIntent]", err);
+        setLoading(false);
+      },
     );
   }, [user]);
 

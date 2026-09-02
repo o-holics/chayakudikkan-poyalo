@@ -14,13 +14,20 @@ export const AREA_GEOHASH_PRECISION = 4;
 /** A table is locked in this long before its meet time, so people can travel. */
 export const TRAVEL_LEAD_MS = 45 * 60 * 1000;
 
+/**
+ * How early before the lock a "a pair is fine" opt-in starts to apply — i.e.
+ * we only seat someone below their chosen size in this final window.
+ */
+export const RELAX_LEAD_MS = 25 * 60 * 1000;
+
+/** The daily boundary: tea can be scheduled up to the next 6am. */
+export const DAY_BOUNDARY_HOUR = 6;
+
 /** Two people can share a table if their wanted times are within this. */
 export const TIME_CLUSTER_MS = 75 * 60 * 1000;
 
 /** You must want tea at least this far ahead (time to form + travel). */
 export const MIN_LEAD_MS = 60 * 60 * 1000;
-/** ...and at most this far ahead. */
-export const MAX_LEAD_MS = 20 * 60 * 60 * 1000;
 
 /** Spatial search widens as the lock deadline approaches. */
 export const MATCH_TIERS = [
@@ -83,14 +90,20 @@ export type Profile = {
 
 export type IntentStatus = "pending" | "matched" | "expired" | "cancelled";
 
+export type SpotRef = { spotId: string; spotName: string; lat: number; lng: number };
+
 export type TeaIntent = {
   id: string;
   uid: string;
   displayName: string;
-  spotId: string;
-  spotName: string;
+  /** Where this person is — the matcher gathers people and picks the spot. */
   point: LatLng;
   areaKey: string;
+  areaLabel?: string;
+  /** Optional hint: a place they'd like it to be. */
+  spotPref?: SpotRef | null;
+  /** Nearby cafes the matcher may choose from. */
+  spotOptions: SpotRef[];
   /** When they want to sit down (epoch ms). */
   desiredAt: number;
   /** Latest moment the table may be formed: desiredAt - TRAVEL_LEAD_MS. */
@@ -127,6 +140,7 @@ export type TeaTable = {
   id: string;
   spotId: string;
   spotName: string;
+  spotPoint?: LatLng;
   memberUids: string[];
   members: TableMember[];
   line: Line;
@@ -184,4 +198,14 @@ export type ReportReason = (typeof REPORT_REASONS)[number];
 
 export function clampSize(n: number): number {
   return Math.max(SIZE_MIN, Math.min(SIZE_MAX, Math.round(n)));
+}
+
+/** The latest you can want tea for: the next 6am boundary after `now`. */
+export function latestDesiredAt(now: number): number {
+  const d = new Date(now);
+  d.setHours(DAY_BOUNDARY_HOUR, 0, 0, 0);
+  if (d.getTime() <= now) d.setDate(d.getDate() + 1);
+  let t = d.getTime();
+  if (t < now + MIN_LEAD_MS) t += 24 * 60 * 60 * 1000;
+  return t;
 }

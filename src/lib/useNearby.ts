@@ -35,7 +35,7 @@ function profileQuery(p: Profile | null): NearbyQuery | null {
 const STORE_KEY = "chaya-nearby";
 const CLIENT_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
-type NearbyCache = { spots: NearbySpot[]; areaLabel?: string; sig: string; fetchedAt: number };
+type NearbyCache = { spots: NearbySpot[]; areaLabel?: string; center?: { lat: number; lng: number }; sig: string; fetchedAt: number };
 
 function loadCache(): NearbyCache {
   if (typeof window === "undefined") return { spots: [], sig: "", fetchedAt: 0 };
@@ -96,6 +96,7 @@ export function useNearby() {
   const { profile, loading: profileLoading } = useProfile();
   const [spots, setSpots] = useState<NearbySpot[]>([]);
   const [areaLabel, setAreaLabel] = useState<string | undefined>(undefined);
+  const [center, setCenter] = useState<{ lat: number; lng: number } | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [radiusKm, setRadiusKmState] = useState(DEFAULT_RADIUS_KM);
@@ -113,6 +114,7 @@ export function useNearby() {
     if (!force && cacheHitFor(sig)) {
       setSpots(cache.spots);
       setAreaLabel(cache.areaLabel);
+      setCenter(cache.center);
       setLoading(false);
       return;
     }
@@ -122,9 +124,10 @@ export function useNearby() {
       "q" in query ? `q=${encodeURIComponent(query.q)}` : `lat=${query.lat}&lng=${query.lng}`;
     try {
       const data = await apiFetch<NearbyResponse>(`/api/spots/nearby?${base}&radiusKm=${km}`);
-      saveCache({ spots: data.spots, areaLabel: data.areaLabel, sig, fetchedAt: Date.now() });
+      saveCache({ spots: data.spots, areaLabel: data.areaLabel, center: data.center, sig, fetchedAt: Date.now() });
       setSpots(data.spots);
       setAreaLabel(data.areaLabel);
+      setCenter(data.center);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't load nearby spots.");
     } finally {
@@ -181,6 +184,7 @@ export function useNearby() {
   return {
     spots,
     areaLabel,
+    center,
     loading,
     error,
     radiusKm,

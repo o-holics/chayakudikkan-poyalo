@@ -13,11 +13,14 @@ import { Screen, Stack, Title, QuietText, Button, Divider } from "@/components/u
 import { Doodle } from "@/components/Doodle";
 import { AppTopBar } from "@/components/AppTopBar";
 import { PersonSheet } from "@/components/PersonSheet";
-import type { TableMember } from "@/lib/models";
+import type { LatLng, TableMember } from "@/lib/models";
 
-function mapHref(spotId: string, spotName: string): string {
+function mapHref(spotId: string, spotName: string, point?: LatLng): string {
   const c = cachedSpot(spotId);
-  return c?.geoUrl || c?.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spotName)}`;
+  if (c?.geoUrl) return c.geoUrl;
+  if (c?.mapsUrl) return c.mapsUrl;
+  if (point) return `geo:${point.lat},${point.lng}?q=${encodeURIComponent(spotName)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spotName)}`;
 }
 
 export default function TablePage() {
@@ -147,7 +150,7 @@ export default function TablePage() {
             : ""}
         </span>
         <a
-          href={mapHref(table.spotId, table.spotName)}
+          href={mapHref(table.spotId, table.spotName, table.spotPoint)}
           target="_blank"
           rel="noreferrer"
           className="text-ink underline decoration-line underline-offset-4"

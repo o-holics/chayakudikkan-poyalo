@@ -5,6 +5,7 @@ import { randomLine } from "./lines";
 import {
   MATCH_TIERS,
   MEET_WINDOW_MS,
+  RELAX_LEAD_MS,
   SIZE_MAX,
   TABLE_TTL_MS,
   TIME_CLUSTER_MS,
@@ -29,34 +30,51 @@ function median(nums: number[]): number {
   return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
 }
 
-/** Where the group meets: shared preference wins, else the most central pick. */
-function pickSpot(members: Intent[]): { spotId: string; spotName: string } {
-  const votes = new Map<string, { name: string; n: number }>();
-  for (const m of members) {
-    const v = votes.get(m.spotId) ?? { name: m.spotName, n: 0 };
-    v.n += 1;
-    votes.set(m.spotId, v);
-  }
-  let top: [string, { name: string; n: number }] | undefined;
-  for (const e of votes) if (!top || e[1].n > top[1].n) top = e;
-  if (top && top[1].n > members.length / 2) return { spotId: top[0], spotName: top[1].name };
+type Chosen = { spotId: string; spotName: string; point: { lat: number; lng: number } };
 
-  let pick = [...votes.keys()][0];
-  let pickName = votes.get(pick)!.name;
-  let bestSum = Infinity;
-  for (const c of votes.keys()) {
-    const p = members.find((m) => m.spotId === c)!.point;
-    const sum = members.reduce((acc, m) => acc + distanceMeters(p, m.point), 0);
-    if (sum < bestSum) {
-      bestSum = sum;
-      pick = c;
-      pickName = votes.get(c)!.name;
-    }
+/**
+ * The matcher decides where. A shared explicit preference wins; otherwise pick
+ * the cafe (from everyone's nearby options) that's most central to the group,
+ * nudged toward ones that show up on more people's lists.
+ */
+function pickSpot(members: Intent[]): Chosen {
+  type Cand = { name: string; lat: number; lng: number; pref: number; opt: number };
+  const cands = new Map<string, Cand>();
+  const add = (r: { spotId: string; spotName: string; lat: number; lng: number }, kind: "pref" | "opt") => {
+    const c = cands.get(r.spotId) ?? { name: r.spotName, lat: r.lat, lng: r.lng, pref: 0, opt: 0 };
+    c[kind] += 1;
+    cands.set(r.spotId, c);
+  };
+  for (const m of members) {
+    if (m.spotPref) add(m.spotPref, "pref");
+    for (const o of m.spotOptions ?? []) add(o, "opt");
   }
-  return { spotId: pick, spotName: pickName };
+
+  const entries = [...cands.entries()];
+  if (entries.length === 0) {
+    // No candidates at all — meet at the group's centre with a generic label.
+    const lat = members.reduce((s, m) => s + m.point.lat, 0) / members.length;
+    const lng = members.reduce((s, m) => s + m.point.lng, 0) / members.length;
+    return { spotId: `pt_${lat.toFixed(4)}_${lng.toFixed(4)}`, spotName: "a tea shop nearby", point: { lat, lng } };
+  }
+
+  const majority = entries.find(([, c]) => c.pref > members.length / 2);
+  const chosen =
+    majority ??
+    entries
+      .map(([id, c]) => {
+        const p = { lat: c.lat, lng: c.lng };
+        const spread = members.reduce((acc, m) => acc + distanceMeters(p, m.point), 0);
+        const score = spread - (c.pref * 1200 + c.opt * 250); // metres of "credit" per vote
+        return [id, c, score] as const;
+      })
+      .sort((a, b) => a[2] - b[2])[0];
+
+  const [id, c] = chosen;
+  return { spotId: id, spotName: c.name, point: { lat: c.lat, lng: c.lng } };
 }
 
-export type PlannedTable = { members: Intent[]; spotId: string; spotName: string; meetAt: number };
+export type PlannedTable = { members: Intent[]; meetAt: number } & Chosen;
 
 /**
  * Try to form tables from the pending intents of one area.
@@ -85,8 +103,9 @@ export function planTables(intents: Intent[], now: number): { tables: PlannedTab
           distanceMeters(seed.point, c.point) <= tier.clusterM,
       )
       .sort((a, b) => {
-        const pa = a.spotId === seed.spotId ? 0 : 1;
-        const pb = b.spotId === seed.spotId ? 0 : 1;
+        const seedPref = seed.spotPref?.spotId;
+        const pa = seedPref && a.spotPref?.spotId === seedPref ? 0 : 1;
+        const pb = seedPref && b.spotPref?.spotId === seedPref ? 0 : 1;
         if (pa !== pb) return pa - pb;
         const ta = Math.abs(a.desiredAt - seed.desiredAt);
         const tb = Math.abs(b.desiredAt - seed.desiredAt);
@@ -106,11 +125,11 @@ export function planTables(intents: Intent[], now: number): { tables: PlannedTab
     for (let n = Math.min(cap, chosen.length); n >= 2; n -= 1) {
       const slice = chosen.slice(0, n);
       if (n < Math.max(...slice.map(minFor))) continue;
-      const urgent = now >= seed.lockBy;
+      // Only seat someone below their chosen size in the final window before the lock.
+      const relaxWindow = now >= seed.lockBy - RELAX_LEAD_MS;
       const meetsTrueMin = n >= Math.max(...slice.map((x) => x.sizeMin));
-      if (!urgent && !meetsTrueMin) continue;
-      const spot = pickSpot(slice);
-      tables.push({ members: slice, meetAt: median(slice.map((x) => x.desiredAt)), ...spot });
+      if (!relaxWindow && !meetsTrueMin) continue;
+      tables.push({ members: slice, meetAt: median(slice.map((x) => x.desiredAt)), ...pickSpot(slice) });
       slice.forEach((x) => grouped.add(x.uid));
       break;
     }
@@ -145,6 +164,7 @@ export async function matchArea(db: Firestore, areaKey: string, now = Date.now()
       tx.set(db.collection("teaTables").doc(tableId), {
         spotId: plan.spotId,
         spotName: plan.spotName,
+        spotPoint: plan.point,
         memberUids: members.map((m) => m.uid),
         members,
         line,
