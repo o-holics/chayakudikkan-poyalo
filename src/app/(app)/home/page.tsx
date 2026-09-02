@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { useProfile } from "@/lib/useProfile";
 import { useNearby } from "@/lib/useNearby";
+import { useHistory } from "@/lib/useSocial";
 import { useAreaDemand, useSpotInterest, usePendingIntent } from "@/lib/useTea";
 import { useActiveTable } from "@/lib/useActiveTable";
 import { geohash } from "@/lib/geo";
@@ -28,6 +29,32 @@ function clock(ms: number) {
   return new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
+function GamePanel({ open, onToggle }: { open: boolean; onToggle: (v: boolean) => void }) {
+  return open ? (
+    <div className="rounded-2xl border border-line p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs uppercase tracking-wide text-ink-soft">pass the time</span>
+        <button
+          type="button"
+          className="text-xs text-ink-soft underline decoration-line underline-offset-4"
+          onClick={() => onToggle(false)}
+        >
+          hide
+        </button>
+      </div>
+      <TeaGame />
+    </div>
+  ) : (
+    <button
+      type="button"
+      className="text-sm text-ink-soft underline decoration-line underline-offset-4"
+      onClick={() => onToggle(true)}
+    >
+      pass a minute?
+    </button>
+  );
+}
+
 export default function HomePage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -35,6 +62,7 @@ export default function HomePage() {
   const { table } = useActiveTable();
   const { intent } = usePendingIntent();
   const { spots, areaLabel, center } = useNearby();
+  const history = useHistory();
   const demand = useAreaDemand();
   const interest = useSpotInterest();
 
@@ -51,6 +79,7 @@ export default function HomePage() {
       : lookedNearby > 2
         ? `${lookedNearby} people looked for tea near you today`
         : null;
+  const lastCup = history.find((h) => h.outcome === "met");
 
   useEffect(() => {
     if (authLoading) return;
@@ -118,37 +147,32 @@ export default function HomePage() {
           </div>
 
           <div className="mt-6">
-            {showGame ? (
-              <div className="rounded-2xl border border-line p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-xs uppercase tracking-wide text-ink-soft">pass the time</span>
-                  <button
-                    type="button"
-                    className="text-xs text-ink-soft underline decoration-line underline-offset-4"
-                    onClick={() => setShowGame(false)}
-                  >
-                    hide
-                  </button>
-                </div>
-                <TeaGame />
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="text-sm text-ink-soft underline decoration-line underline-offset-4"
-                onClick={() => setShowGame(true)}
-              >
-                play something while you wait
-              </button>
-            )}
+            <GamePanel open={showGame} onToggle={setShowGame} />
           </div>
         </div>
       ) : (
         <div className="mt-8 flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col items-center justify-center gap-5 text-center text-ink-soft">
-            <Doodle name="kettle" size={88} />
-            <QuietText>{areaLabel ? `Tea near ${areaLabel}.` : "Say when you're free for a cup."}</QuietText>
+          <Doodle name="kettle" size={72} className="text-ink-soft" />
+          <Stack gap={3} className="mt-6">
+            <Title>up for a cup?</Title>
+            <QuietText>
+              Say when you&apos;re free. We gather a few people {areaLabel ? `near ${areaLabel}` : "nearby"}, pick the
+              spot, and lock it in 45 minutes before so everyone can get there.
+            </QuietText>
+            {!liquidity && <QuietText>Quiet right now — you could be the one who starts it.</QuietText>}
+          </Stack>
+
+          <div className="mt-8">
+            <GamePanel open={showGame} onToggle={setShowGame} />
           </div>
+
+          {lastCup && (
+            <p className="mt-8 text-xs text-ink-soft">
+              last cup · {lastCup.spotName} ·{" "}
+              {new Date(lastCup.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+            </p>
+          )}
+
           <BottomAction>
             <Link href="/tea" className="block">
               <Button full>I&apos;m up for tea</Button>

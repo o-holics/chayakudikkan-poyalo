@@ -89,7 +89,7 @@ export default function YouPage() {
                 </div>
                 <p className="mt-1 font-mal text-sm text-ink-soft">{h.line?.quote}</p>
                 <p className="mt-1 text-xs text-ink-soft">
-                  {(h.members ?? []).map((m) => m.displayName).join(", ")}
+                  {(h.members ?? []).map((m) => m.alias).join(", ")}
                   {h.outcome && h.outcome !== "met" ? ` · ${h.outcome}` : ""}
                 </p>
               </li>

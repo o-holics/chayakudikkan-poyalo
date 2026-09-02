@@ -13,7 +13,7 @@ import {
 import { db } from "./firebaseClient";
 import type { TableMessage } from "./models";
 
-export function useTableChat(tableId: string, me: { uid: string; name: string } | null) {
+export function useTableChat(tableId: string, me: { uid: string; alias: string } | null) {
   const [messages, setMessages] = useState<TableMessage[]>([]);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function useTableChat(tableId: string, me: { uid: string; name: string } 
       if (!clean || !me) return;
       await addDoc(collection(db, "teaTables", tableId, "messages"), {
         senderUid: me.uid,
-        senderName: me.name,
+        senderAlias: me.alias,
         text: clean,
         createdAt: Date.now(),
       });
@@ -64,12 +64,12 @@ export function usePresence(tableId: string): Record<string, number | null> {
 
 export async function setArrived(
   tableId: string,
-  me: { uid: string; name: string },
+  me: { uid: string; alias: string },
   arrived: boolean,
 ): Promise<void> {
   await setDoc(
     doc(db, "teaTables", tableId, "presence", me.uid),
-    { uid: me.uid, displayName: me.name, arrivedAt: arrived ? Date.now() : null, leftAt: null },
+    { uid: me.uid, alias: me.alias, arrivedAt: arrived ? Date.now() : null, leftAt: null },
     { merge: true },
   );
 }

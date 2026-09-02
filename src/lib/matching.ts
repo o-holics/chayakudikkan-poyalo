@@ -1,5 +1,6 @@
 import "server-only";
 import { Timestamp, type Firestore } from "firebase-admin/firestore";
+import { assignAliases } from "./aliases";
 import { distanceMeters } from "./geo";
 import { randomLine } from "./lines";
 import {
@@ -158,7 +159,8 @@ export async function matchArea(db: Firestore, areaKey: string, now = Date.now()
 
     for (const plan of tables) {
       const tableId = `t_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-      const members: TableMember[] = plan.members.map((m) => ({ uid: m.uid, displayName: m.displayName }));
+      const aliases = assignAliases(plan.members.map((m) => m.uid));
+      const members: TableMember[] = plan.members.map((m) => ({ uid: m.uid, alias: aliases[m.uid] }));
       const line = randomLine();
 
       tx.set(db.collection("teaTables").doc(tableId), {

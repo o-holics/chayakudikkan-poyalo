@@ -134,7 +134,8 @@ export type Line = {
 
 export type TableStatus = "forming" | "active" | "met" | "expired" | "cancelled";
 
-export type TableMember = { uid: string; displayName: string };
+/** In a meetup, people are known only by a per-table alias. */
+export type TableMember = { uid: string; alias: string };
 
 export type TeaTable = {
   id: string;
@@ -156,14 +157,14 @@ export type TeaTable = {
 export type TableMessage = {
   id: string;
   senderUid: string;
-  senderName: string;
+  senderAlias: string;
   text: string;
   createdAt: number;
 };
 
 export type Presence = {
   uid: string;
-  displayName: string;
+  alias: string;
   arrivedAt: number | null;
   leftAt: number | null;
 };

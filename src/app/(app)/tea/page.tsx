@@ -46,7 +46,7 @@ function toLocalInput(ms: number): string {
 export default function TeaPage() {
   const router = useRouter();
   const { profile } = useProfile();
-  const { spots, areaLabel, center, loading: nearbyLoading, locate, hasLocation } = useNearby();
+  const { spots, areaLabel, center, loading: nearbyLoading, locate, run, hasLocation } = useNearby();
   const { intent } = usePendingIntent();
   const { table } = useActiveTable();
 
@@ -59,6 +59,8 @@ export default function TeaPage() {
   const [pairOk, setPairOk] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [changingLoc, setChangingLoc] = useState(false);
+  const [areaInput, setAreaInput] = useState("");
 
   useEffect(() => {
     const now = Date.now();
@@ -72,7 +74,8 @@ export default function TeaPage() {
     else if (intent) router.replace("/home");
   }, [table, intent, router]);
 
-  const point = profile?.homePoint ?? center ?? null;
+  // `center` follows wherever we last looked (home by default, or an override).
+  const point = center ?? profile?.homePoint ?? null;
   const spotOptions: SpotRef[] = spots
     .slice(0, 8)
     .map((s) => ({ spotId: s.id, spotName: s.name, lat: s.lat, lng: s.lng }));
@@ -130,6 +133,51 @@ export default function TeaPage() {
           </div>
         ) : (
           <div className="mt-8">
+            {/* where — you may not be home */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-ink">near {areaLabel ?? "you"}</span>
+                <button
+                  type="button"
+                  className="text-sm text-ink-soft underline decoration-line underline-offset-4"
+                  onClick={() => setChangingLoc((v) => !v)}
+                >
+                  {changingLoc ? "cancel" : "somewhere else?"}
+                </button>
+              </div>
+              {changingLoc && (
+                <Stack gap={3} className="mt-3 rounded-xl border border-line p-4">
+                  <Button
+                    variant="ghost"
+                    full
+                    onClick={() => {
+                      locate();
+                      setChangingLoc(false);
+                    }}
+                  >
+                    use where I am now
+                  </Button>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (areaInput.trim().length >= 2) {
+                        run({ q: areaInput.trim() });
+                        setChangingLoc(false);
+                        setPref(null);
+                      }
+                    }}
+                  >
+                    <input
+                      value={areaInput}
+                      onChange={(e) => setAreaInput(e.target.value)}
+                      placeholder="or type an area"
+                      className="w-full rounded-xl border border-line bg-paper-raised px-4 py-3 text-base text-ink placeholder:text-ink-soft/70 focus:border-ink focus:outline-none"
+                    />
+                  </form>
+                </Stack>
+              )}
+            </div>
+
             <p className="mb-3 text-sm text-ink-soft">when do you want to sit down?</p>
 
             {!custom ? (

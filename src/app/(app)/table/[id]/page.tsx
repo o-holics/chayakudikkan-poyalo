@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { useProfile } from "@/lib/useProfile";
 import { useTable } from "@/lib/useActiveTable";
 import { useTableChat, usePresence, setArrived } from "@/lib/useTableExtras";
 import { cachedSpot } from "@/lib/useNearby";
@@ -27,10 +26,10 @@ export default function TablePage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { profile } = useProfile();
   const { table, loading } = useTable(id);
 
-  const me = user && profile ? { uid: user.uid, name: profile.displayName } : null;
+  const myAlias = user ? table?.members.find((m) => m.uid === user.uid)?.alias : undefined;
+  const me = user && myAlias ? { uid: user.uid, alias: myAlias } : null;
   const { messages, send } = useTableChat(id, me);
   const presence = usePresence(id);
 
@@ -172,7 +171,7 @@ export default function TablePage() {
               className="flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-sm disabled:opacity-100"
             >
               <span className={`h-1.5 w-1.5 rounded-full ${here ? "bg-ink" : "bg-line"}`} />
-              <span className="text-ink">{self ? "you" : m.displayName}</span>
+              <span className="text-ink">{self ? "you" : m.alias}</span>
             </button>
           );
         })}
@@ -211,7 +210,7 @@ export default function TablePage() {
             const self = m.senderUid === user?.uid;
             return (
               <div key={m.id} className={self ? "text-right" : "text-left"}>
-                {!self && <p className="text-xs text-ink-soft">{m.senderName}</p>}
+                {!self && <p className="text-xs text-ink-soft">{m.senderAlias}</p>}
                 <p className="text-sm text-ink">{m.text}</p>
               </div>
             );
@@ -249,7 +248,7 @@ export default function TablePage() {
 
       {person && (
         <PersonSheet
-          person={person}
+          person={{ uid: person.uid, displayName: person.alias }}
           onClose={() => setPerson(null)}
         />
       )}
