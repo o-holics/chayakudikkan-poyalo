@@ -40,7 +40,7 @@ const CARDS = [
   {
     tag: "THE SIGN",
     title: "Malayalam Movie Lines",
-    desc: "Every table gets assigned a cult classic Malayalam movie quote like \"Ethra manoharamaya nadakku!\". Say the line at the cafe to find your group.",
+    desc: "Every table gets assigned a cult classic Malayalam movie quote like \"Ethra manoharamaya nadakkatha swapnam\". Say the line at the cafe to find your group.",
     highlight: "Fun, low-pressure table identification.",
   },
   {
@@ -58,7 +58,7 @@ const FAQS = [
   },
   {
     q: "How do I find my table at the cafe?",
-    a: "Every table gets assigned an iconic Malayalam movie quote sign (e.g. 'Ethra manoharamaya nadakku!'). When you arrive at the spot, just say the line to identify your table.",
+    a: "Every table gets assigned an iconic Malayalam movie quote sign (e.g. 'Ethra manoharamaya nadakkatha swapnam!'). When you arrive at the spot, just say the line to identify your table.",
   },
   {
     q: "What if no one is nearby at my chosen time?",
@@ -246,7 +246,7 @@ export default function Landing() {
       <section className="mt-20 rounded-3xl border border-line bg-paper-raised p-8 sm:p-12 text-center shadow-sm">
         <Doodle name="sparkle" size={44} className="mx-auto text-ink" />
         <h2 className="mt-4 font-mal text-3xl sm:text-5xl leading-snug text-ink">
-          &quot;Ethra manoharamaya nadakku!&quot;
+          &quot;Ethra manoharamaya nadakkatha swapnam&quot;
         </h2>
         <p className="mt-4 text-sm sm:text-base text-ink-soft max-w-xl mx-auto font-light leading-relaxed">
           Finding your table at the cafe is part of the fun. Every match comes with a Malayalam cult classic dialogue sign. Say the line, sit down, and enjoy chai.
