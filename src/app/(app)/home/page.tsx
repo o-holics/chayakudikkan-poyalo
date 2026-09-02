@@ -105,7 +105,7 @@ export default function HomePage() {
   };
 
   return (
-    <Screen>
+    <Screen wide>
       <AppTopBar />
 
       <Stack gap={2} className="mt-6">
@@ -116,18 +116,23 @@ export default function HomePage() {
       </Stack>
 
       {table ? (
-        <div className="mt-6 flex flex-1 flex-col pb-24">
-          <Link href={`/table/${table.id}`} className="block rounded-2xl border border-line bg-paper-raised p-6 shadow-sm transition-all hover:border-ink/30">
-            <p className="text-xs uppercase tracking-wide text-ink-soft">your table · say the line</p>
-            <p className="mt-3 font-mal text-2xl leading-snug text-ink">{table.line.quote}</p>
-            <p className="mt-2 text-sm text-ink-soft">
-              {table.line.translit} — {table.line.film}
-            </p>
-            <p className="mt-4 text-sm font-medium text-ink">
-              {table.spotName}
-              {table.meetAt ? ` · around ${clock(table.meetAt)}` : ""} · {table.memberUids.length} of you
-            </p>
-          </Link>
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12 pb-24">
+          <div className="lg:col-span-7">
+            <Link href={`/table/${table.id}`} className="block rounded-2xl border border-line bg-paper-raised p-6 shadow-sm transition-all hover:border-ink/30">
+              <p className="text-xs uppercase tracking-wide text-ink-soft">your table · say the line</p>
+              <p className="mt-3 font-mal text-2xl leading-snug text-ink">{table.line.quote}</p>
+              <p className="mt-2 text-sm text-ink-soft">
+                {table.line.translit} — {table.line.film}
+              </p>
+              <p className="mt-4 text-sm font-medium text-ink">
+                {table.spotName}
+                {table.meetAt ? ` · around ${clock(table.meetAt)}` : ""} · {table.memberUids.length} of you
+              </p>
+            </Link>
+          </div>
+          <div className="lg:col-span-5">
+            <GamePanel open={showGame} onToggle={setShowGame} />
+          </div>
           <BottomAction>
             <Link href={`/table/${table.id}`}>
               <Button full>open the table</Button>
@@ -135,121 +140,125 @@ export default function HomePage() {
           </BottomAction>
         </div>
       ) : intent ? (
-        <div className="mt-6 flex flex-1 flex-col pb-24">
-          <div className="rounded-2xl border border-line bg-paper-raised p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">you&apos;re up for tea</span>
-              <span className="rounded-full bg-ink/5 px-2.5 py-0.5 text-xs font-medium text-ink">active</span>
-            </div>
-            <p className="mt-3 text-xl font-semibold text-ink">
-              {intent.spotPref?.spotName ?? (intent.areaLabel ? `near ${intent.areaLabel}` : "near you")}
-            </p>
-            <p className="mt-1 text-sm font-medium text-ink-soft">around {clock(intent.desiredAt)}</p>
-            <QuietText className="mt-4">
-              We&apos;ll gather a table and show it here by {clock(intent.lockBy)}. No need to keep this open — check
-              back then.
-            </QuietText>
-            <div className="mt-5">
-              <Button variant="quiet" onClick={cancelIntent} disabled={cancelling}>
-                {cancelling ? "…" : "never mind"}
-              </Button>
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12 pb-24">
+          {/* Left Column: Active Intent */}
+          <div className="lg:col-span-7 flex flex-col gap-6">
+            <div className="rounded-2xl border border-line bg-paper-raised p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">you&apos;re up for tea</span>
+                <span className="rounded-full bg-ink/5 px-2.5 py-0.5 text-xs font-medium text-ink">active</span>
+              </div>
+              <p className="mt-3 text-xl font-semibold text-ink">
+                {intent.spotPref?.spotName ?? (intent.areaLabel ? `near ${intent.areaLabel}` : "near you")}
+              </p>
+              <p className="mt-1 text-sm font-medium text-ink-soft">around {clock(intent.desiredAt)}</p>
+              <QuietText className="mt-4">
+                We&apos;ll gather a table and show it here by {clock(intent.lockBy)}. No need to keep this open — check
+                back then.
+              </QuietText>
+              <div className="mt-5">
+                <Button variant="quiet" onClick={cancelIntent} disabled={cancelling}>
+                  {cancelling ? "…" : "never mind"}
+                </Button>
+              </div>
             </div>
           </div>
 
-          {/* Nearby preview when waiting */}
-          {spots.length > 0 && (
-            <div className="mt-6">
-              <div className="mb-3 flex items-center justify-between px-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
-                  tea spots {areaLabel ? `near ${areaLabel}` : "nearby"}
-                </span>
-                <span className="text-xs text-ink-soft">{spots.length} spots</span>
+          {/* Right Column: Nearby & Game */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            {spots.length > 0 && (
+              <div>
+                <div className="mb-3 flex items-center justify-between px-1">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                    tea spots {areaLabel ? `near ${areaLabel}` : "nearby"}
+                  </span>
+                  <span className="text-xs text-ink-soft">{spots.length} spots</span>
+                </div>
+                <ul className="divide-y divide-line rounded-2xl border border-line bg-paper-raised">
+                  {spots.slice(0, 4).map((s) => (
+                    <li key={s.id} className="flex items-center justify-between px-4 py-3.5">
+                      <span className="min-w-0 pr-2">
+                        <span className="block truncate text-sm font-medium text-ink">{s.name}</span>
+                        <span className="mt-0.5 block text-xs text-ink-soft">{prettyDistance(s.distanceM)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="divide-y divide-line rounded-2xl border border-line bg-paper-raised">
-                {spots.slice(0, 4).map((s) => (
-                  <li key={s.id} className="flex items-center justify-between px-4 py-3.5">
-                    <span className="min-w-0 pr-2">
-                      <span className="block truncate text-sm font-medium text-ink">{s.name}</span>
-                      <span className="mt-0.5 block text-xs text-ink-soft">{prettyDistance(s.distanceM)}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            )}
 
-          <div className="mt-6">
             <GamePanel open={showGame} onToggle={setShowGame} />
           </div>
         </div>
       ) : (
-        <div className="mt-6 flex flex-1 flex-col pb-24">
-          {/* Main CTA Card */}
-          <div className="rounded-2xl border border-line bg-paper-raised p-6 shadow-sm">
-            <Doodle name="kettle" size={64} className="text-ink" />
-            <Stack gap={2} className="mt-4">
-              <Title className="text-2xl">up for a cup?</Title>
-              <QuietText>
-                Say when you&apos;re free. We gather a few people {areaLabel ? `near ${areaLabel}` : "nearby"}, pick the
-                spot, and lock it in 45 minutes before so everyone can get there.
-              </QuietText>
-              {!liquidity && <QuietText className="text-xs italic">Quiet right now — you could be the one who starts it.</QuietText>}
-            </Stack>
-            <div className="mt-5">
-              <Link href="/tea" className="block">
-                <Button full>I&apos;m up for tea</Button>
-              </Link>
+        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 pb-24">
+          {/* Left Column: CTA Card */}
+          <div className="lg:col-span-7 flex flex-col gap-6">
+            <div className="rounded-2xl border border-line bg-paper-raised p-6 shadow-sm">
+              <Doodle name="kettle" size={64} className="text-ink" />
+              <Stack gap={2} className="mt-4">
+                <Title className="text-2xl">up for a cup?</Title>
+                <QuietText>
+                  Say when you&apos;re free. We gather a few people {areaLabel ? `near ${areaLabel}` : "nearby"}, pick the
+                  spot, and lock it in 45 minutes before so everyone can get there.
+                </QuietText>
+                {!liquidity && <QuietText className="text-xs italic">Quiet right now — you could be the one who starts it.</QuietText>}
+              </Stack>
+              <div className="mt-5">
+                <Link href="/tea" className="block">
+                  <Button full>I&apos;m up for tea</Button>
+                </Link>
+              </div>
             </div>
           </div>
 
-          {/* Nearby Spots List */}
-          <div className="mt-6">
-            <div className="mb-3 flex items-center justify-between px-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
-                tea spots {areaLabel ? `near ${areaLabel}` : "nearby"}
-              </span>
-              {spots.length > 0 && <span className="text-xs text-ink-soft">{spots.length} nearby</span>}
+          {/* Right Column: Nearby Spots & Game Panel */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            <div>
+              <div className="mb-3 flex items-center justify-between px-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                  tea spots {areaLabel ? `near ${areaLabel}` : "nearby"}
+                </span>
+                {spots.length > 0 && <span className="text-xs text-ink-soft">{spots.length} nearby</span>}
+              </div>
+
+              {spotsLoading && spots.length === 0 ? (
+                <div className="rounded-2xl border border-line p-6 text-center text-sm text-ink-soft">
+                  looking around for tea spots…
+                </div>
+              ) : spots.length === 0 ? (
+                <div className="rounded-2xl border border-line p-6 text-center text-sm text-ink-soft">
+                  No spots found right here yet.
+                </div>
+              ) : (
+                <ul className="divide-y divide-line rounded-2xl border border-line bg-paper-raised">
+                  {spots.slice(0, 5).map((s) => (
+                    <li key={s.id}>
+                      <Link href="/tea" className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-ink/5">
+                        <span className="min-w-0 pr-2">
+                          <span className="block truncate text-sm font-medium text-ink">{s.name}</span>
+                          <span className="mt-0.5 block text-xs text-ink-soft">
+                            {prettyDistance(s.distanceM)}
+                            {s.address ? ` · ${s.address}` : ""}
+                          </span>
+                        </span>
+                        <span className="text-xs font-medium text-ink-soft">→</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
-            {spotsLoading && spots.length === 0 ? (
-              <div className="rounded-2xl border border-line p-6 text-center text-sm text-ink-soft">
-                looking around for tea spots…
+            <GamePanel open={showGame} onToggle={setShowGame} />
+
+            {lastCup && (
+              <div className="rounded-xl border border-line/60 bg-paper-raised/50 px-4 py-3 text-center text-xs text-ink-soft">
+                last cup · <span className="font-medium text-ink">{lastCup.spotName}</span> ·{" "}
+                {new Date(lastCup.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
               </div>
-            ) : spots.length === 0 ? (
-              <div className="rounded-2xl border border-line p-6 text-center text-sm text-ink-soft">
-                No spots found right here yet.
-              </div>
-            ) : (
-              <ul className="divide-y divide-line rounded-2xl border border-line bg-paper-raised">
-                {spots.slice(0, 5).map((s) => (
-                  <li key={s.id}>
-                    <Link href="/tea" className="flex items-center justify-between px-4 py-3.5 transition-colors hover:bg-ink/5">
-                      <span className="min-w-0 pr-2">
-                        <span className="block truncate text-sm font-medium text-ink">{s.name}</span>
-                        <span className="mt-0.5 block text-xs text-ink-soft">
-                          {prettyDistance(s.distanceM)}
-                          {s.address ? ` · ${s.address}` : ""}
-                        </span>
-                      </span>
-                      <span className="text-xs font-medium text-ink-soft">→</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
             )}
           </div>
-
-          {/* Mini-game / Pass time section */}
-          <div className="mt-6">
-            <GamePanel open={showGame} onToggle={setShowGame} />
-          </div>
-
-          {lastCup && (
-            <div className="mt-6 rounded-xl border border-line/60 bg-paper-raised/50 px-4 py-3 text-center text-xs text-ink-soft">
-              last cup · <span className="font-medium text-ink">{lastCup.spotName}</span> ·{" "}
-              {new Date(lastCup.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-            </div>
-          )}
 
           <BottomAction>
             <Link href="/tea" className="block">

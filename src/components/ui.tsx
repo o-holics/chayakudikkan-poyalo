@@ -12,22 +12,26 @@ export function Screen({
   children,
   className,
   center,
+  wide,
 }: {
   children: ReactNode;
   className?: string;
   center?: boolean;
+  wide?: boolean;
 }) {
   return (
     <div
       className={cx(
-        "min-h-dvh w-full md:flex md:justify-center md:px-6 md:py-14",
+        "min-h-dvh w-full md:flex md:justify-center md:px-6 md:py-10",
         center ? "md:items-center" : "md:items-start",
       )}
     >
       <main
         className={cx(
-          "mx-auto flex min-h-dvh w-full max-w-[26rem] flex-col px-6 pb-10 pt-8",
-          "md:min-h-0 md:max-w-[30rem] md:rounded-3xl md:border md:border-line md:bg-paper-raised md:px-10 md:pb-12 md:pt-10",
+          "mx-auto flex min-h-dvh w-full flex-col px-6 pb-10 pt-8",
+          wide
+            ? "max-w-[26rem] md:max-w-3xl lg:max-w-5xl md:min-h-0 md:rounded-3xl md:border md:border-line md:bg-paper-raised md:px-10 md:pb-12 md:pt-10"
+            : "max-w-[26rem] md:max-w-[30rem] md:min-h-0 md:rounded-3xl md:border md:border-line md:bg-paper-raised md:px-10 md:pb-12 md:pt-10",
           center && "justify-center",
           className,
         )}
