@@ -1,27 +1,113 @@
 import type { Line } from "./models";
 
 // The line a table says to find each other — a dialogue from Malayalam cinema.
-// Starter set. A native speaker should proof the spelling and grow this list;
-// keep entries short and warm, nothing crude.
+// Short, warm, instantly recognizable pop-culture lines across eras.
 export const LINES: Line[] = [
-  { quote: "എടാ മോനേ ദിനേശാ", translit: "Eda mone Dinesha", gloss: "Oh dear Dinesha", film: "Nadodikkattu" },
-  { quote: "ഗഫൂർ കാ ദോസ്ത്", translit: "Gafoor ka dost", gloss: "Gafoor's trusty friend", film: "Nadodikkattu" },
-  { quote: "പോളണ്ടിനെപ്പറ്റി ഒരക്ഷരം മിണ്ടരുത്", translit: "Polandine-ppatti oraksharam mindaruthu", gloss: "Not one word about Poland", film: "Sandesham" },
-  { quote: "ഉദ്യോഗസ്ഥ ദുഷ്പ്രഭുത്വം", translit: "Udyogastha dushprabhuthwam", gloss: "Bureaucratic tyranny!", film: "Sandesham" },
-  { quote: "എന്റെ പേര് ആടു തോമ", translit: "Ente per Aadu Thoma", gloss: "My name is Aadu Thoma", film: "Spadikam" },
-  { quote: "മംഗലശ്ശേരി നീലകണ്ഠൻ", translit: "Mangalassery Neelakandan", gloss: "Mangalassery Neelakandan", film: "Devasuram" },
-  { quote: "പൂവള്ളി ഇന്ദുചൂഡൻ", translit: "Poovalli Induchoodan", gloss: "Poovalli Induchoodan", film: "Narasimham" },
-  { quote: "ബാലകൃഷ്ണാ", translit: "Balakrishnaa", gloss: "Balakrishnaaa!", film: "Ramji Rao Speaking" },
-  { quote: "അപ്പുക്കുട്ടാ", translit: "Appukkuttaa", gloss: "Appukutta!", film: "In Harihar Nagar" },
-  { quote: "കിറ്റുണ്ണീ", translit: "Kittunni", gloss: "Kittunni!", film: "Kilukkam" },
-  { quote: "ജോസഫ് അലക്സ്", translit: "Joseph Alex", gloss: "Joseph Alex", film: "The King" },
-  { quote: "ആനക്കാട്ടിൽ ചാക്കോച്ചി", translit: "Anakkattil Chackochi", gloss: "Anakkattil Chackochi", film: "Lelam" },
-  { quote: "എനിക്ക് പറക്കണം", translit: "Enikku parakkanam", gloss: "I want to fly", film: "Bangalore Days" },
-  { quote: "ഞാൻ ഒരു കംപ്ലീറ്റ് മാൻ ആണ്", translit: "Njan oru complete man aanu", gloss: "I am a complete man", film: "Kumbalangi Nights" },
-  { quote: "ജോർജുകുട്ടി", translit: "Georgekutty", gloss: "Georgekutty", film: "Drishyam" },
-  { quote: "ന്നാ താൻ കേസ് കൊട്", translit: "Nna thaan case kodu", gloss: "Fine — then go sue me", film: "Nna Thaan Case Kodu" },
-  { quote: "എൻകുട്ടി ഏട്ടത്തിയമ്മ", translit: "Enkutty ettathiyamma", gloss: "Enkutty, sister-in-law", film: "Godfather" },
-  { quote: "അളിയാ", translit: "Aliyaa", gloss: "Bro", film: "Aavesham" },
+  // --- Original entries ---
+  {
+    quote: "നീ പോ മോനേ ദിനേശാ",
+    translit: "Nee po mone Dinesha",
+    gloss: "Beat it, kid (Go away, Dinesha)",
+    film: "Narasimham",
+  },
+  {
+    quote: "ഗഫൂർ കാ ദോസ്ത്",
+    translit: "Gafoor ka dost",
+    gloss: "Gafoor's friend",
+    film: "Nadodikkattu",
+  },
+  {
+    quote: "പോളണ്ടിനെപ്പറ്റി ഒരക്ഷരം മിണ്ടരുത്",
+    translit: "Polandineppatti oraksharam mindaruthu",
+    gloss: "Don't say a word about Poland",
+    film: "Sandesham",
+  },
+  {
+    quote: "ഉദ്യോഗസ്ഥ ദുഷ്പ്രഭുത്വം",
+    translit: "Udyogastha dushprabhuthwam",
+    gloss: "Bureaucratic tyranny",
+    film: "Aaraattu",
+  },
+  {
+    quote: "അപ്പുക്കുട്ടാ ഓവറാക്കി ചളമാക്കണ്ട",
+    translit: "Appukuttaa overaakki chalamakkanda",
+    gloss: "Appukutta, don't overdo it and ruin it",
+    film: "In Harihar Nagar",
+  },
+  {
+    quote: "എന്റെ കുരിശുപള്ളി മാതാവേ",
+    translit: "Ente Kurishupalli Mathave",
+    gloss: "Mother Mary of Kurishupally!",
+    film: "Lelam",
+  },
+  {
+    quote: "ന്നാ താൻ കേസ് കൊട്",
+    translit: "Nna thaan case kodu",
+    gloss: "Fine, then sue me",
+    film: "Nna Thaan Case Kodu",
+  },
+
+  // --- New additions ---
+  {
+    quote: "സാധനം കയ്യിലുണ്ടോ?",
+    translit: "Saadhanam kayyilundo?",
+    gloss: "Do you have the stuff?",
+    film: "Nadodikkattu",
+  },
+  {
+    quote: "എല്ലാത്തിനും അതിന്റേതായ സമയമുണ്ട് ദാസാ",
+    translit: "Ellaathinum athintethaya samayamundu Dasa",
+    gloss: "There is a right time for everything, Dasa",
+    film: "Nadodikkattu",
+  },
+  {
+    quote: "എന്താല്ലേ...",
+    translit: "Enthalle...",
+    gloss: "Quite something, isn't it?",
+    film: "Manichitrathazhu",
+  },
+  {
+    quote: "വിടമാട്ടേ!",
+    translit: "Vidamaatte!",
+    gloss: "I won't leave!",
+    film: "Manichitrathazhu",
+  },
+  {
+    quote: "സവാരി ഗിരി ഗിരി",
+    translit: "Savaari giri giri",
+    gloss: "Smooth sailing / All chill",
+    film: "Kilukkam",
+  },
+  {
+    quote: "തള്ളേ, കലിപ്പടക്കണല്ലോ!",
+    translit: "Thalle, kalippadakkanallo!",
+    gloss: "Man, gotta blow off some steam!",
+    film: "Aavesham",
+  },
+  {
+    quote: "അലോസരം... തികച്ചും അലോസരം!",
+    translit: "Alocharam... thikachum alocharam!",
+    gloss: "Nuisance... pure nuisance!",
+    film: "Chithram",
+  },
+  {
+    quote: "ഉപദേശം കൊള്ളാം, പക്ഷേ തന്റെ തന്തയല്ല എന്റെ തന്ത",
+    translit: "Upadesham kollam, pakshe thante thanthayalla ente thantha",
+    gloss: "Good advice, but your father isn't my father",
+    film: "Lucifer",
+  },
+  {
+    quote: "ധൈര്യമായി മുന്നോട്ട് പോവുക",
+    translit: "Dhairyamayi munnottu povuka",
+    gloss: "Move forward with courage",
+    film: "Sandesham",
+  },
+  {
+    quote: "ഓർമ്മയുണ്ടോ ഈ മുഖം?",
+    translit: "Ormmayundo ee mukham?",
+    gloss: "Remember this face?",
+    film: "Commissioner",
+  },
 ];
 
 export function randomLine(): Line {
