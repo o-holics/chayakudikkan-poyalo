@@ -133,11 +133,13 @@ export default function HomePage() {
           <div className="lg:col-span-5">
             <GamePanel open={showGame} onToggle={setShowGame} />
           </div>
-          <BottomAction>
-            <Link href={`/table/${table.id}`}>
-              <Button full>open the table</Button>
-            </Link>
-          </BottomAction>
+          <div className="lg:col-span-12">
+            <BottomAction>
+              <Link href={`/table/${table.id}`}>
+                <Button full>open the table</Button>
+              </Link>
+            </BottomAction>
+          </div>
         </div>
       ) : intent ? (
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12 pb-24">
@@ -191,7 +193,7 @@ export default function HomePage() {
           </div>
         </div>
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 pb-24">
+        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 pb-12">
           {/* Left Column: CTA Card */}
           <div className="lg:col-span-7 flex flex-col gap-6">
             <div className="rounded-2xl border border-line bg-paper-raised p-6 shadow-sm">
@@ -259,12 +261,6 @@ export default function HomePage() {
               </div>
             )}
           </div>
-
-          <BottomAction>
-            <Link href="/tea" className="block">
-              <Button full>I&apos;m up for tea</Button>
-            </Link>
-          </BottomAction>
         </div>
       )}
     </Screen>
