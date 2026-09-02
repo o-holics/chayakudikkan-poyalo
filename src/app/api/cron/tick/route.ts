@@ -1,11 +1,11 @@
 import { adminDb, adminReady } from "@/lib/firebaseAdmin";
-import { runPoolPass } from "@/lib/matching";
+import { matchArea } from "@/lib/matching";
 import { finalizeTable } from "@/lib/tableAdmin";
 
 export const runtime = "nodejs";
 
-// Safety net for terminal transitions when no client is around to nudge.
-// Point a scheduler (GitHub Actions / cron-job.org) at this every ~60s.
+// Forms tables from pending intents and closes tables past their meet time.
+// Point a scheduler (GitHub Actions / cron-job.org) here every ~2–5 min.
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization") ?? "";
@@ -17,16 +17,19 @@ export async function POST(req: Request) {
   const db = adminDb();
   const now = Date.now();
   let formed = 0;
+  let expired = 0;
   let closed = 0;
 
-  const pools = await db
-    .collection("matchPools")
-    .where("waitingCount", ">=", 2)
-    .limit(50)
+  const pending = await db
+    .collection("teaIntents")
+    .where("status", "==", "pending")
+    .limit(200)
     .get();
-  for (const p of pools.docs) {
-    const res = await runPoolPass(db, p.id, now).catch(() => null);
-    if (res) formed++;
+  const areas = Array.from(new Set(pending.docs.map((d) => d.data().areaKey as string)));
+  for (const areaKey of areas) {
+    const r = await matchArea(db, areaKey, now).catch(() => ({ formed: 0, expired: 0 }));
+    formed += r.formed;
+    expired += r.expired;
   }
 
   const stale = await db
@@ -42,8 +45,8 @@ export async function POST(req: Request) {
     const arrived = presence.docs.filter((x) => x.data().arrivedAt).length;
     const outcome = now >= (d.expiresAt ?? 0) ? "expired" : arrived >= 2 ? "met" : "expired";
     await finalizeTable(db, t.id, outcome, memberUids, now).catch(() => {});
-    closed++;
+    closed += 1;
   }
 
-  return Response.json({ ok: true, formed, closed });
+  return Response.json({ ok: true, formed, expired, closed });
 }

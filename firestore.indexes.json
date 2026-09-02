@@ -1,9 +1,20 @@
 {
   "indexes": [
     {
-      "collectionGroup": "waiting",
+      "collectionGroup": "teaIntents",
       "queryScope": "COLLECTION",
-      "fields": [{ "fieldPath": "joinedAt", "order": "ASCENDING" }]
+      "fields": [
+        { "fieldPath": "uid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "teaIntents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "areaKey", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
     },
     {
       "collectionGroup": "messages",

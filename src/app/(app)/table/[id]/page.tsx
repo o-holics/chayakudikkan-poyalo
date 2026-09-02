@@ -140,7 +140,12 @@ export default function TablePage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between text-sm">
-        <span className="text-ink-soft">📍 {table.spotName}</span>
+        <span className="text-ink-soft">
+          📍 {table.spotName}
+          {table.meetAt
+            ? ` · around ${new Date(table.meetAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`
+            : ""}
+        </span>
         <a
           href={mapHref(table.spotId, table.spotName)}
           target="_blank"

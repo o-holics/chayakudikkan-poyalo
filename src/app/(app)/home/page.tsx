@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { useProfile } from "@/lib/useProfile";
 import { useNearby } from "@/lib/useNearby";
-import { usePoolCounts, useSpotInterest } from "@/lib/usePools";
+import { useAreaDemand, useSpotInterest, usePendingIntent } from "@/lib/useTea";
 import { useActiveTable } from "@/lib/useActiveTable";
 import { geohash, prettyDistance } from "@/lib/geo";
 import { AREA_GEOHASH_PRECISION, RADIUS_MAX_KM, RADIUS_MIN_KM } from "@/lib/models";
@@ -14,13 +15,7 @@ import { Screen, Stack, Title, QuietText, Button, Field } from "@/components/ui"
 import { Doodle } from "@/components/Doodle";
 import { AppTopBar } from "@/components/AppTopBar";
 
-function RadiusControl({
-  km,
-  onChange,
-}: {
-  km: number;
-  onChange: (n: number) => void;
-}) {
+function RadiusControl({ km, onChange }: { km: number; onChange: (n: number) => void }) {
   const btn =
     "flex h-8 w-8 items-center justify-center rounded-full border border-line text-ink transition-opacity active:opacity-60 disabled:opacity-30";
   return (
@@ -47,26 +42,30 @@ function greeting() {
   return "morning";
 }
 
+function clock(ms: number) {
+  return new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
 export default function HomePage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
   const { table } = useActiveTable();
+  const { intent } = usePendingIntent();
   const { spots, areaLabel, loading, error, radiusKm, run, locate, setRadiusKm, hasLocation } = useNearby();
-  const counts = usePoolCounts();
+  const demand = useAreaDemand();
   const interest = useSpotInterest();
 
   const [area, setArea] = useState("");
   const [changing, setChanging] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
-  const areaKeys = Array.from(
-    new Set(spots.map((s) => geohash(s.lat, s.lng, AREA_GEOHASH_PRECISION))),
-  );
-  const waitingNearby = areaKeys.reduce((n, k) => n + (counts[k] ?? 0), 0);
+  const areaKeys = Array.from(new Set(spots.map((s) => geohash(s.lat, s.lng, AREA_GEOHASH_PRECISION))));
+  const upNearby = areaKeys.reduce((n, k) => n + (demand[k] ?? 0), 0);
   const lookedNearby = spots.reduce((n, s) => n + (interest[s.id] ?? 0), 0);
   const liquidity =
-    waitingNearby > 0
-      ? `${waitingNearby} ${waitingNearby === 1 ? "person is" : "people are"} waiting for tea near you now`
+    upNearby > 0
+      ? `${upNearby} ${upNearby === 1 ? "person is" : "people are"} up for tea near you`
       : lookedNearby > 2
         ? `${lookedNearby} people looked for tea near you today`
         : null;
@@ -77,6 +76,16 @@ export default function HomePage() {
     else if (!profileLoading && !profile) router.replace("/onboarding");
   }, [authLoading, profileLoading, user, profile, router]);
 
+  const cancelIntent = async () => {
+    setCancelling(true);
+    try {
+      await apiFetch("/api/tea/cancel", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    setCancelling(false);
+  };
+
   return (
     <Screen>
       <AppTopBar />
@@ -85,23 +94,38 @@ export default function HomePage() {
         <Title>
           {greeting()}, {profile?.displayName ?? "friend"}
         </Title>
-        {!table && (
-          <QuietText>{areaLabel ? `Tea near ${areaLabel}.` : "Pick a spot and wait for a small table."}</QuietText>
+        {!table && !intent && (
+          <QuietText>{areaLabel ? `Tea near ${areaLabel}.` : "Say when you're up for tea."}</QuietText>
         )}
-        {!table && liquidity && <QuietText>{liquidity}.</QuietText>}
+        {!table && !intent && liquidity && <QuietText>{liquidity}.</QuietText>}
       </Stack>
 
       {table ? (
-        <Link
-          href={`/table/${table.id}`}
-          className="mt-8 block rounded-2xl border border-line bg-paper-raised p-5"
-        >
-          <p className="text-xs uppercase tracking-wide text-ink-soft">your table</p>
-          <p className="mt-2 font-mal text-lg text-ink">{table.line.quote}</p>
-          <p className="mt-1 text-sm text-ink-soft">
-            {table.spotName} · {table.memberUids.length} of you
+        <Link href={`/table/${table.id}`} className="mt-8 block rounded-2xl border border-line bg-paper-raised p-6">
+          <p className="text-xs uppercase tracking-wide text-ink-soft">your table · say the line</p>
+          <p className="mt-3 font-mal text-2xl leading-snug text-ink">{table.line.quote}</p>
+          <p className="mt-2 text-sm text-ink-soft">
+            {table.line.translit} — {table.line.film}
+          </p>
+          <p className="mt-4 text-sm text-ink">
+            {table.spotName}
+            {table.meetAt ? ` · around ${clock(table.meetAt)}` : ""} · {table.memberUids.length} of you
           </p>
         </Link>
+      ) : intent ? (
+        <div className="mt-8 rounded-2xl border border-line p-6">
+          <p className="text-xs uppercase tracking-wide text-ink-soft">you&apos;re up for tea</p>
+          <p className="mt-3 text-lg text-ink">{intent.spotName}</p>
+          <p className="mt-1 text-sm text-ink-soft">around {clock(intent.desiredAt)}</p>
+          <QuietText className="mt-4">
+            We&apos;ll gather a small table and show it here by {clock(intent.lockBy)}. Check back then — no need to keep this open.
+          </QuietText>
+          <div className="mt-4">
+            <Button variant="quiet" onClick={cancelIntent} disabled={cancelling}>
+              {cancelling ? "…" : "never mind"}
+            </Button>
+          </div>
+        </div>
       ) : (
         <div className="mt-8 flex flex-1 flex-col">
           {!hasLocation && (
@@ -135,15 +159,13 @@ export default function HomePage() {
           {!loading && !error && spots.length === 0 && hasLocation && (
             <div className="mt-10 flex flex-col items-center gap-4 text-center text-ink-soft">
               <Doodle name="kettle" size={72} />
-              <p className="text-sm">
-                Nothing within {radiusKm} km. Widen the search, or try another area.
-              </p>
+              <p className="text-sm">Nothing within {radiusKm} km. Widen the search, or try another area.</p>
             </div>
           )}
 
           <ul className="mt-2 divide-y divide-line">
             {spots.map((s) => {
-              const waiting = counts[geohash(s.lat, s.lng, AREA_GEOHASH_PRECISION)] ?? 0;
+              const up = demand[geohash(s.lat, s.lng, AREA_GEOHASH_PRECISION)] ?? 0;
               return (
                 <li key={s.id}>
                   <Link href={`/spot/${s.id}`} className="flex items-center justify-between gap-4 py-4">
@@ -151,7 +173,7 @@ export default function HomePage() {
                       <span className="block truncate text-ink">{s.name}</span>
                       <span className="mt-0.5 block text-sm text-ink-soft">
                         {prettyDistance(s.distanceM)}
-                        {waiting > 0 && ` · ${waiting} waiting near here`}
+                        {up > 0 && ` · ${up} up for tea near here`}
                       </span>
                     </span>
                     <span className="text-ink-soft">→</span>
@@ -173,12 +195,7 @@ export default function HomePage() {
                 }}
               >
                 <Stack gap={2}>
-                  <Field
-                    placeholder="area name"
-                    value={area}
-                    onChange={(e) => setArea(e.target.value)}
-                    autoFocus
-                  />
+                  <Field placeholder="area name" value={area} onChange={(e) => setArea(e.target.value)} autoFocus />
                   <Button variant="quiet" type="submit">
                     look here
                   </Button>

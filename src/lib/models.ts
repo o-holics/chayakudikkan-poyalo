@@ -5,21 +5,29 @@ export const SIZE_MIN = 3;
 export const SIZE_MAX = 6;
 export const DEFAULT_SIZE_MIN = 3;
 export const DEFAULT_SIZE_MAX = 5;
-/** Only ever reached when a waiter opts in to a smaller table. */
+/** Only ever reached when someone opts in to a smaller table. */
 export const RELAXED_MIN = 2;
 
-/** Pools are city-sized; proximity grouping happens inside them. */
+/** Areas are city-sized; proximity grouping happens inside them. */
 export const AREA_GEOHASH_PRECISION = 4;
 
-/** Progressive relaxation tiers, keyed by how long the oldest waiter has waited. */
-export const RELAX_TIERS = [
-  { afterMs: 0, clusterM: 1800, needTarget: true },
-  { afterMs: 150 * 1000, clusterM: 3500, needTarget: false },
-  { afterMs: 5 * 60 * 1000, clusterM: 9000, needTarget: false },
-] as const;
+/** A table is locked in this long before its meet time, so people can travel. */
+export const TRAVEL_LEAD_MS = 45 * 60 * 1000;
 
-/** After this long still short of a table, offer the waiter a smaller table. */
-export const OFFER_RELAX_AFTER_MS = 3 * 60 * 1000;
+/** Two people can share a table if their wanted times are within this. */
+export const TIME_CLUSTER_MS = 75 * 60 * 1000;
+
+/** You must want tea at least this far ahead (time to form + travel). */
+export const MIN_LEAD_MS = 60 * 60 * 1000;
+/** ...and at most this far ahead. */
+export const MAX_LEAD_MS = 20 * 60 * 60 * 1000;
+
+/** Spatial search widens as the lock deadline approaches. */
+export const MATCH_TIERS = [
+  { leadMsLeft: 30 * 60 * 1000, clusterM: 1800 },
+  { leadMsLeft: 10 * 60 * 1000, clusterM: 3500 },
+  { leadMsLeft: -Infinity, clusterM: 9000 },
+] as const;
 
 /** A day's "people looked here" counter resets after this. */
 export const INTEREST_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -73,27 +81,28 @@ export type Profile = {
   stats?: { shared: number; missed: number };
 };
 
-export type PoolWaiter = {
+export type IntentStatus = "pending" | "matched" | "expired" | "cancelled";
+
+export type TeaIntent = {
+  id: string;
   uid: string;
   displayName: string;
-  joinedAt: number;
-  sizeMin: number;
-  sizeMax: number;
-  /** Set only when the waiter opts in to a smaller table. */
-  relaxedMin?: number | null;
-  /** The spot this person picked — honoured when the group agrees. */
   spotId: string;
   spotName: string;
   point: LatLng;
-  blockedUids: string[];
-};
-
-export type MatchPool = {
   areaKey: string;
-  waitingCount: number;
-  formingDeadline: number | null;
-  lockUntil: number | null;
-  updatedAt: number;
+  /** When they want to sit down (epoch ms). */
+  desiredAt: number;
+  /** Latest moment the table may be formed: desiredAt - TRAVEL_LEAD_MS. */
+  lockBy: number;
+  sizeMin: number;
+  sizeMax: number;
+  /** Set when they said a pair is fine. */
+  relaxedMin?: number | null;
+  blockedUids: string[];
+  createdAt: number;
+  status: IntentStatus;
+  tableId?: string | null;
 };
 
 export type SpotInterest = {
@@ -123,6 +132,9 @@ export type TeaTable = {
   line: Line;
   status: TableStatus;
   createdAt: number;
+  /** When the group has agreed to sit down. */
+  meetAt: number;
+  /** Grace period after meetAt before the table is considered a no-show. */
   meetBy: number;
   expiresAt: number;
 };
@@ -172,9 +184,4 @@ export type ReportReason = (typeof REPORT_REASONS)[number];
 
 export function clampSize(n: number): number {
   return Math.max(SIZE_MIN, Math.min(SIZE_MAX, Math.round(n)));
-}
-
-/** Is a table of `n` acceptable to everyone in `waiters`? */
-export function sizeSuitsAll(n: number, waiters: Pick<PoolWaiter, "sizeMin" | "sizeMax">[]): boolean {
-  return n >= SIZE_MIN && waiters.every((w) => n >= w.sizeMin && n <= w.sizeMax);
 }

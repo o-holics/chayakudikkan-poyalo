@@ -24,17 +24,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // ── Server-owned: matching pools (counts only, no private data) ──
-    match /matchPools/{areaKey} {
-      allow read: if signedIn();
+    // ── "Up for tea" intents — you can read your own; server writes ──
+    match /teaIntents/{intentId} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow write: if false;
-      match /waiting/{uid} {
-        allow read: if signedIn();
-        allow write: if false;
-      }
     }
 
-    // ── Server-owned: "people looked here today" counters ───────────
+    // ── Server-owned aggregates ────────────────────────────────────
+    match /areaDemand/{areaKey} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
     match /interest/{spotId} {
       allow read: if signedIn();
       allow write: if false;
